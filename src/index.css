@@ -1,0 +1,216 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #f8fafc;
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Animations & glass effects */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Global Dark Mode Support - Premium & High-Contrast Palette */
+html.dark, body.dark {
+  background-color: #0b0f19 !important;
+  color: #f8fafc !important;
+  color-scheme: dark;
+}
+
+/* Base Body smooth transitions */
+body {
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* Dark mode surface elevations & background replacements */
+html.dark body {
+  background-color: #0b0f19 !important;
+  color: #f8fafc !important;
+}
+
+html.dark .bg-white,
+html.dark [class*="bg-white"] {
+  background-color: #131c2e !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+html.dark .bg-slate-50,
+html.dark .bg-neutral-50,
+html.dark [class*="bg-[#F5F5F7]"],
+html.dark [class*="bg-[#f5f5f7]"],
+html.dark [class*="bg-slate-50"] {
+  background-color: #0b0f19 !important;
+}
+
+html.dark .bg-slate-100,
+html.dark .bg-neutral-100,
+html.dark [class*="bg-slate-100"] {
+  background-color: #182238 !important;
+}
+
+html.dark .bg-slate-200,
+html.dark [class*="bg-slate-200"] {
+  background-color: #24324d !important;
+}
+
+/* Hover surfaces in dark mode */
+html.dark .hover\:bg-slate-50:hover,
+html.dark .hover\:bg-neutral-50:hover,
+html.dark [class*="hover:bg-slate-50"]:hover {
+  background-color: #182238 !important;
+}
+
+html.dark .hover\:bg-slate-100:hover,
+html.dark [class*="hover:bg-slate-100"]:hover {
+  background-color: #202d47 !important;
+}
+
+/* Primary Headings & High-Contrast Texts in Dark Mode */
+html.dark .text-slate-900,
+html.dark .text-slate-800,
+html.dark .text-neutral-900,
+html.dark .text-neutral-800,
+html.dark [class*="text-[#1d1d1f]"],
+html.dark [class*="text-slate-900"],
+html.dark [class*="text-slate-800"] {
+  color: #f8fafc !important;
+}
+
+/* Secondary Texts in Dark Mode */
+html.dark .text-slate-700,
+html.dark .text-slate-600,
+html.dark .text-neutral-700,
+html.dark .text-neutral-600,
+html.dark [class*="text-[#6e6e73]"],
+html.dark [class*="text-[#86868b]"],
+html.dark [class*="text-slate-700"],
+html.dark [class*="text-slate-600"] {
+  color: #cbd5e1 !important;
+}
+
+html.dark .text-slate-500,
+html.dark .text-neutral-500,
+html.dark [class*="text-slate-500"] {
+  color: #94a3b8 !important;
+}
+
+html.dark .text-slate-400,
+html.dark [class*="text-slate-400"] {
+  color: #94a3b8 !important;
+}
+
+/* Nav Sub-header active tab contrast in Dark Mode */
+html.dark nav button.bg-slate-900,
+html.dark nav button[class*="bg-slate-900"] {
+  background-color: #2563eb !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3) !important;
+}
+
+/* Borders in Dark Mode */
+html.dark .border-slate-100,
+html.dark .border-slate-200,
+html.dark .border-slate-300,
+html.dark .border-neutral-200,
+html.dark [class*="border-[#e8e8ed]"],
+html.dark [class*="border-slate-200"] {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]),
+html.dark [class*="divide-slate-200"] > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Form Controls & Inputs in Dark Mode */
+html.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+html.dark select,
+html.dark textarea {
+  background-color: #182238 !important;
+  color: #f8fafc !important;
+  border-color: #334155 !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+html.dark input:focus,
+html.dark select:focus,
+html.dark textarea:focus {
+  border-color: #3b82f6 !important;
+  background-color: #1e2d4a !important;
+}
+
+/* Glass panel & Modals in dark mode */
+html.dark .glass-panel,
+html.dark [class*="backdrop-blur"] {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+/* Preserve vivid colors inside buttons and badges */
+html.dark .bg-emerald-600,
+html.dark .bg-emerald-500,
+html.dark .bg-orange-600,
+html.dark .bg-orange-500,
+html.dark .bg-blue-600,
+html.dark .bg-rose-600,
+html.dark .bg-[#0066cc] {
+  color: #ffffff !important;
+}
+
+html.dark .text-white {
+  color: #ffffff !important;
+}
+
+/* Dark Mode support for logos and brand badges */
+html.dark header [class*="bg-[#1d1d1f]"] {
+  background-color: #1e293b !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+}
+
+/* Custom scrollbars in dark mode */
+html.dark .custom-scrollbar::-webkit-scrollbar-track {
+  background: #0b0f19;
+}
+
+html.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+
+html.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+

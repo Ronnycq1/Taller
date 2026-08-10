@@ -1,0 +1,161 @@
+{
+  "entities": {
+    "Cliente": {
+      "title": "Cliente",
+      "description": "Información del cliente dueño del vehículo",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nombre": { "type": "string" },
+        "telefono": { "type": "string" },
+        "correo": { "type": "string" }
+      },
+      "required": ["id", "nombre", "telefono", "correo"]
+    },
+    "Vehiculo": {
+      "title": "Vehiculo",
+      "description": "Ficha y registro de admisión de un vehículo",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "placa": { "type": "string" },
+        "marca": { "type": "string" },
+        "modelo": { "type": "string" },
+        "anio": { "type": "integer" },
+        "cliente": { "$ref": "#/entities/Cliente" },
+        "fechaIngreso": { "type": "string" },
+        "estado": { "type": "string", "enum": ["Ingresado", "En Proceso", "Listo para Entrega", "Entregado"] },
+        "kilometraje": { "type": "integer" },
+        "nivelCombustible": { "type": "integer" },
+        "imagenUrl": { "type": "string" },
+        "fotosCliente": { "type": "array"}
+      },
+      "required": ["id", "placa", "marca", "modelo", "anio", "cliente", "fechaIngreso", "estado", "kilometraje", "nivelCombustible"]
+    },
+    "TareaMantenimiento": {
+      "title": "TareaMantenimiento",
+      "description": "Detalle de una tarea individual de la lista de pendientes",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nombre": { "type": "string" },
+        "completada": { "type": "boolean" },
+        "categoria": { "type": "string" },
+        "costoEstimado": { "type": "number" }
+      },
+      "required": ["id", "nombre", "completada", "categoria", "costoEstimado"]
+    },
+    "RepuestoRequerido": {
+      "title": "RepuestoRequerido",
+      "description": "Repuestos asociados a una ficha de mantenimiento",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "repuestoId": { "type": "string" },
+        "nombre": { "type": "string" },
+        "cantidad": { "type": "integer" },
+        "costoUnitario": { "type": "number" },
+        "surtido": { "type": "boolean" },
+        "imagenUrl": { "type": "string" }
+      },
+      "required": ["id", "repuestoId", "nombre", "cantidad", "costoUnitario", "surtido"]
+    },
+    "Mantenimiento": {
+      "title": "Mantenimiento",
+      "description": "Ficha técnica de mantenimiento asociada a un vehículo",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "vehiculoId": { "type": "string" },
+        "fechaRegistro": { "type": "string" },
+        "mecanicoAsignado": { "type": "string" },
+        "tareasRealizadas": { "type": "array" },
+        "observaciones": { "type": "string" },
+        "repuestosNecesarios": { "type": "array" },
+        "diagnosticoFuturo": { "type": "string" },
+        "recordatorioProximoMeses": { "type": "integer" },
+        "costoManoObra": { "type": "number" },
+        "totalCalculado": { "type": "number" }
+      },
+      "required": ["id", "vehiculoId", "fechaRegistro", "mecanicoAsignado", "tareasRealizadas", "observaciones", "repuestosNecesarios", "diagnosticoFuturo", "recordatorioProximoMeses", "costoManoObra", "totalCalculado"]
+    },
+    "RepuestoInventario": {
+      "title": "RepuestoInventario",
+      "description": "Repuesto registrado en el inventario/bodega",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "codigo": { "type": "string" },
+        "nombre": { "type": "string" },
+        "stock": { "type": "integer" },
+        "stockMinimo": { "type": "integer" },
+        "precioVenta": { "type": "number" },
+        "ubicacion": { "type": "string" },
+        "categoria": { "type": "string" },
+        "imagenUrl": { "type": "string" }
+      },
+      "required": ["id", "codigo", "nombre", "stock", "stockMinimo", "precioVenta", "ubicacion", "categoria"]
+    },
+    "ActividadReciente": {
+      "title": "ActividadReciente",
+      "description": "Rastro de actividades y registros realizados",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tipo": { "type": "string" },
+        "mensaje": { "type": "string" },
+        "fecha": { "type": "string" },
+        "usuario": { "type": "string" },
+        "avatar": { "type": "string" }
+      },
+      "required": ["id", "tipo", "mensaje", "fecha", "usuario"]
+    },
+    "CitaMantenimiento": {
+      "title": "CitaMantenimiento",
+      "description": "Citas de mantenimiento agendadas por clientes nuevos o existentes",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nombreCliente": { "type": "string" },
+        "telefonoCliente": { "type": "string" },
+        "correoCliente": { "type": "string" },
+        "placa": { "type": "string" },
+        "marca": { "type": "string" },
+        "modelo": { "type": "string" },
+        "anio": { "type": "integer" },
+        "kilometraje": { "type": "integer" },
+        "tipoServicios": { "type": "array" },
+        "fechaPreferencia": { "type": "string" },
+        "horaPreferencia": { "type": "string" },
+        "comentarios": { "type": "string" },
+        "fechaRegistro": { "type": "string" },
+        "estado": { "type": "string", "enum": ["Pendiente", "Aprobada", "Completada", "Cancelada"] }
+      },
+      "required": [
+        "id", "nombreCliente", "telefonoCliente", "correoCliente", "placa", "marca", "modelo", "anio", "tipoServicios", "fechaPreferencia", "horaPreferencia", "fechaRegistro", "estado"
+      ]
+    }
+  },
+  "firestore": {
+    "/vehicles/{vehicleId}": {
+      "schema": "Vehiculo",
+      "description": "Guarda los vehículos ingresados a taller"
+    },
+    "/maintenances/{maintenanceId}": {
+      "schema": "Mantenimiento",
+      "description": "Guarda las fichas de mantenimiento mecánico de cada vehículo"
+    },
+    "/inventory/{inventoryId}": {
+      "schema": "RepuestoInventario",
+      "description": "Guarda el inventario disponible en la bodega"
+    },
+    "/activities/{activityId}": {
+      "schema": "ActividadReciente",
+      "description": "Guarda el registro global de actividades del taller"
+    },
+    "/appointments/{appointmentId}": {
+      "schema": "CitaMantenimiento",
+      "description": "Guarda las citas agendadas por los clientes"
+    }
+  }
+}

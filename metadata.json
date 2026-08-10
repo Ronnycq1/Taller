@@ -1,0 +1,6 @@
+{
+  "name": "CQ Motors - Gestión de Mantenimiento",
+  "description": "Plataforma administrativa integral para control de talleres, gestión de inventarios y registro de mantenimientos vehiculares de CQ Motors.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
