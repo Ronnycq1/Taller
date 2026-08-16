@@ -35,16 +35,36 @@ import {
   ShieldCheck,
   Award,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   CalendarRange,
   BookOpen,
   Gift,
   MessageSquareHeart,
   TrendingUp,
   Sun,
-  Moon
+  Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Menu,
+  X
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { ToastProvider, useToast } from "./components/Toast";
+
+// Isolated LiveClock component to prevent re-renders of the main app
+function LiveClock() {
+  const [timeStr, setTimeStr] = React.useState(() =>
+    new Date().toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+  );
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setTimeStr(new Date().toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+  return <span>{timeStr}</span>;
+}
 
 function AppContent() {
   const { showSuccess, showError, showInfo, showWarning } = useToast();
@@ -91,6 +111,27 @@ function AppContent() {
 
   // Selected vehicle for active repair worksheet (overrides tab content)
   const [selectedVehicle, setSelectedVehicle] = useState<Vehiculo | null>(null);
+
+  // Collapsible Sidebar & Mobile Drawer State
+  const [sidebarExpanded, setSidebarExpanded] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem("cq_sidebar_expanded");
+      return saved !== null ? saved === "true" : true;
+    } catch {
+      return true;
+    }
+  });
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
+
+  const toggleSidebar = () => {
+    setSidebarExpanded(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem("cq_sidebar_expanded", String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   // Scanned public QR tracking state
   const [publicVehicleId, setPublicVehicleId] = useState<string | null>(null);
@@ -917,6 +958,77 @@ function AppContent() {
   // Pre-calculated alerts count
   const criticalItems = inventory.filter(item => item.stock <= item.stockMinimo).length;
 
+  const pendingAppointmentsCount = useMemo(() => {
+    return appointments.filter(a => a.estado === "Pendiente").length;
+  }, [appointments]);
+
+  const navItems = useMemo(() => {
+    const items: Array<{
+      id: string;
+      label: string;
+      icon: React.ReactNode;
+      badge?: string | number | null;
+      badgeClass?: string;
+    }> = [];
+
+    if (usuario?.role !== UserRole.Cliente) {
+      items.push({
+        id: "dashboard",
+        label: "Tablero de Control",
+        icon: <LayoutDashboard className="h-5 w-5 shrink-0" />
+      });
+      items.push({
+        id: "bsc",
+        label: "Cuadro de Mando (BSC)",
+        icon: <TrendingUp className="h-5 w-5 shrink-0" />
+      });
+    }
+
+    items.push({
+      id: "vehicles",
+      label: "Control de Patio",
+      icon: <Car className="h-5 w-5 shrink-0" />
+    });
+
+    items.push({
+      id: "bitacoras",
+      label: "Bitácoras por Vehículo",
+      icon: <BookOpen className="h-5 w-5 shrink-0" />
+    });
+
+    if (usuario?.role !== UserRole.Cliente) {
+      items.push({
+        id: "inventory",
+        label: "Surtido de Bodega",
+        icon: <Package className="h-5 w-5 shrink-0" />,
+        badge: criticalItems > 0 ? criticalItems : null,
+        badgeClass: "bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full"
+      });
+      items.push({
+        id: "appointments",
+        label: "Citas Recibidas",
+        icon: <CalendarRange className="h-5 w-5 shrink-0" />,
+        badge: pendingAppointmentsCount > 0 ? pendingAppointmentsCount : null,
+        badgeClass: "bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full"
+      });
+      items.push({
+        id: "architecture",
+        label: "Especificación & Esquema DB",
+        icon: <FolderTree className="h-5 w-5 shrink-0" />
+      });
+    }
+
+    items.push({
+      id: "loyalty",
+      label: usuario?.role === UserRole.Cliente ? "Club CQ & Recompensas" : "CRM Fidelidad & Encuestas",
+      icon: <Award className="h-5 w-5 shrink-0" />,
+      badge: usuario?.role !== UserRole.Cliente && surveys.length > 0 ? surveys.length : null,
+      badgeClass: "bg-emerald-500 text-slate-950 text-[10px] font-bold px-2 py-0.5 rounded-full"
+    });
+
+    return items;
+  }, [usuario, criticalItems, pendingAppointmentsCount, surveys.length]);
+
   const floatingDarkModeBtn = (
     <button
       type="button"
@@ -1017,16 +1129,39 @@ function AppContent() {
       
       {/* HEADER BAR */}
       <header className="bg-slate-900 text-white sticky top-0 z-40 border-b border-slate-800 shadow-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             
-            {/* Logo and Brand */}
-            <CQMotorsLogo size="sm" />
+            {/* Left section: Toggles + Logo */}
+            <div className="flex items-center space-x-3">
+              {/* Mobile Menu Toggle Button */}
+              <button
+                type="button"
+                onClick={() => setMobileSidebarOpen(true)}
+                className="p-2 md:hidden bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-all border border-slate-700/60 cursor-pointer"
+                title="Abrir menú de navegación"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+
+              {/* Desktop Collapsible Sidebar Toggle Button */}
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                className="hidden md:flex p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-emerald-400 rounded-xl transition-all border border-slate-700/60 items-center justify-center cursor-pointer"
+                title={sidebarExpanded ? "Contraer menú lateral" : "Expandir menú lateral"}
+              >
+                {sidebarExpanded ? <PanelLeftClose className="h-5 w-5 text-emerald-400" /> : <PanelLeftOpen className="h-5 w-5 text-emerald-400" />}
+              </button>
+
+              {/* Logo and Brand */}
+              <CQMotorsLogo size="sm" />
+            </div>
 
             {/* Real-time Odometer Clock */}
             <div className="hidden md:flex items-center space-x-2 bg-slate-850 py-1.5 px-3 rounded-xl border border-slate-800 text-slate-300 font-mono text-xs">
               <Clock className="h-4 w-4 text-emerald-500 animate-pulse" />
-              <span className="font-semibold">{timeStr || "00:00:00"}</span>
+              <span className="font-semibold"><LiveClock /></span>
               <span className="text-slate-600">|</span>
               <span className="text-slate-400">Taller Central</span>
             </div>
@@ -1089,271 +1224,255 @@ function AppContent() {
         </div>
       </header>
 
-      {/* SUB-HEADER: TAB NAVIGATION CONTROLS */}
-      <nav className="bg-white border-b border-slate-200/80 shadow-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center space-x-2 h-14 overflow-x-auto custom-scrollbar">
-            
-            {usuario.role !== UserRole.Cliente && (
-              <button
-                onClick={() => navigateToTab("dashboard")}
-                className={`px-4 py-2 rounded-xl text-xs font-bold font-sans flex items-center space-x-2 transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === "dashboard" && !selectedVehicle
-                    ? "bg-slate-900 text-white"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                }`}
-              >
-                <LayoutDashboard className="h-4 w-4" />
-                <span>Tablero de Control</span>
-              </button>
-            )}
-
-            {usuario.role !== UserRole.Cliente && (
-              <button
-                onClick={() => navigateToTab("bsc")}
-                className={`px-4 py-2 rounded-xl text-xs font-bold font-sans flex items-center space-x-2 transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === "bsc" && !selectedVehicle
-                    ? "bg-slate-900 text-white"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                }`}
-              >
-                <TrendingUp className="h-4 w-4" />
-                <span>Cuadro de Mando (BSC)</span>
-              </button>
-            )}
-
+      {/* BODY WRAPPER: DESKTOP VERTICAL SIDEBAR + MAIN CONTENT AREA */}
+      <div className="flex flex-1 min-h-[calc(100vh-4rem)]">
+        
+        {/* DESKTOP COLLAPSIBLE VERTICAL SIDEBAR */}
+        <aside
+          className={`hidden md:flex flex-col bg-slate-900 border-r border-slate-800 text-slate-300 transition-all duration-300 sticky top-16 h-[calc(100vh-4rem)] z-30 ${
+            sidebarExpanded ? "w-64" : "w-20"
+          }`}
+        >
+          {/* Sidebar Top Toggle Header */}
+          <div className="p-3.5 border-b border-slate-800/80 flex items-center justify-between">
+            {sidebarExpanded ? (
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 pl-2">
+                Navegación Taller
+              </span>
+            ) : null}
             <button
-              onClick={() => navigateToTab("vehicles")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold font-sans flex items-center space-x-2 transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === "vehicles"
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-              }`}
+              onClick={toggleSidebar}
+              className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-emerald-400 transition-all mx-auto cursor-pointer"
+              title={sidebarExpanded ? "Contraer menú" : "Expandir menú"}
             >
-              <Car className="h-4 w-4" />
-              <span>Control de Patio</span>
-              {selectedVehicle && activeTab === "vehicles" && (
-                <span className="bg-emerald-500 text-slate-950 text-[10px] font-mono px-2 py-0.5 rounded-full font-extrabold uppercase">
-                  Ficha: {selectedVehicle.placa}
-                </span>
-              )}
+              {sidebarExpanded ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
             </button>
-
-            <button
-              onClick={() => navigateToTab("bitacoras")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold font-sans flex items-center space-x-2 transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === "bitacoras"
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-              }`}
-            >
-              <BookOpen className="h-4 w-4" />
-              <span>Bitácoras por Vehículo</span>
-              {selectedVehicle && activeTab === "bitacoras" && (
-                <span className="bg-emerald-500 text-slate-950 text-[10px] font-mono px-2 py-0.5 rounded-full font-extrabold uppercase">
-                  Ficha: {selectedVehicle.placa}
-                </span>
-              )}
-            </button>
-
-            {usuario.role !== UserRole.Cliente && (
-              <button
-                onClick={() => navigateToTab("inventory")}
-                className={`px-4 py-2 rounded-xl text-xs font-bold font-sans flex items-center space-x-2 transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === "inventory" && !selectedVehicle
-                    ? "bg-slate-900 text-white"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                }`}
-              >
-                <Package className="h-4 w-4" />
-                <span>Surtido de Bodega</span>
-                {criticalItems > 0 && (
-                  <span className="bg-rose-100 text-rose-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                    {criticalItems}
-                  </span>
-                )}
-              </button>
-            )}
-
-            {usuario.role !== UserRole.Cliente && (
-              <button
-                onClick={() => navigateToTab("appointments")}
-                className={`px-4 py-2 rounded-xl text-xs font-bold font-sans flex items-center space-x-2 transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === "appointments" && !selectedVehicle
-                    ? "bg-slate-900 text-white"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                }`}
-              >
-                <CalendarRange className="h-4 w-4" />
-                <span>Citas Recibidas</span>
-                {appointments.filter(a => a.estado === "Pendiente").length > 0 && (
-                  <span className="bg-orange-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                    {appointments.filter(a => a.estado === "Pendiente").length}
-                  </span>
-                )}
-              </button>
-            )}
-
-            {usuario.role !== UserRole.Cliente && (
-              <button
-                onClick={() => navigateToTab("architecture")}
-                className={`px-4 py-2 rounded-xl text-xs font-bold font-sans flex items-center space-x-2 transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === "architecture" && !selectedVehicle
-                    ? "bg-slate-900 text-white"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                }`}
-              >
-                <FolderTree className="h-4 w-4" />
-                <span>Especificación & Esquema DB</span>
-              </button>
-            )}
-
-            {/* Loyalty and Satisfaction Surveys Tab Button */}
-            <button
-              onClick={() => navigateToTab("loyalty")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold font-sans flex items-center space-x-2 transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === "loyalty" && !selectedVehicle
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-              }`}
-            >
-              <Award className="h-4 w-4" />
-              <span>{usuario.role === UserRole.Cliente ? "Club CQ & Recompensas" : "CRM Fidelidad & Encuestas"}</span>
-              {usuario.role !== UserRole.Cliente && surveys.length > 0 && (
-                <span className="bg-rose-100 text-rose-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                  {surveys.length}
-                </span>
-              )}
-            </button>
-
           </div>
-        </div>
-      </nav>
 
-      {/* CORE FRAMEWORK BODY LAYOUT */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={selectedVehicle ? `maint-${selectedVehicle.id}` : activeTab}
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -5 }}
-            transition={{ duration: 0.2 }}
-            className="focus:outline-none"
-          >
-            {/* If a vehicle sheet is specifically selected, bypass regular tabs to keep user focus! */}
-            {selectedVehicle && isActionAllowed(usuario.role, "vehicles", selectedVehicle.id) ? (
-              <MaintenanceSheet
-                vehicle={vehicles.find(v => v.id === selectedVehicle.id) || selectedVehicle}
-                vehicleMaintenances={maintenances.filter(m => m.vehiculoId === selectedVehicle.id)}
-                inventory={inventory}
-                userRole={usuario.role}
-                onGoBack={() => setSelectedVehicle(null)}
-                onUpdateMaintenance={handleUpdateMaintenance}
-                onUpdateVehicleStatus={handleUpdateVehicleStatus}
-                onUpdateVehiclePhotos={handleUpdateVehiclePhotos}
-                onUpdateVehicleCoverImage={handleUpdateVehicleCoverImage}
-                onDeleteVehicle={handleDeleteVehicle}
+          {/* Navigation Items List */}
+          <div className="flex-1 py-4 px-3 space-y-1.5 overflow-y-auto custom-scrollbar">
+            {navItems.map(item => {
+              const isActive = activeTab === item.id && !selectedVehicle;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => navigateToTab(item.id)}
+                  className={`w-full flex items-center ${
+                    sidebarExpanded ? "justify-start px-3.5" : "justify-center px-2"
+                  } py-3 rounded-xl text-xs font-bold font-sans transition-all cursor-pointer group relative ${
+                    isActive
+                      ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/20"
+                      : "text-slate-400 hover:bg-slate-800/90 hover:text-slate-100"
+                  }`}
+                  title={!sidebarExpanded ? item.label : undefined}
+                >
+                  <div className="shrink-0">{item.icon}</div>
+                  {sidebarExpanded && (
+                    <span className="ml-3 truncate text-left flex-1">{item.label}</span>
+                  )}
+                  {item.badge && (
+                    <span
+                      className={`${
+                        sidebarExpanded ? "ml-auto" : "absolute -top-1 -right-1"
+                      } ${item.badgeClass}`}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Sidebar Footer User Info */}
+          {sidebarExpanded && (
+            <div className="p-4 border-t border-slate-800/80 bg-slate-950/40">
+              <div className="text-[10px] text-slate-500 font-mono">CQ Motors Taller v2.5</div>
+              <div className="text-[11px] font-bold text-slate-300 truncate mt-0.5">{usuario.fullName}</div>
+            </div>
+          )}
+        </aside>
+
+        {/* MOBILE DRAWER OVERLAY */}
+        <AnimatePresence>
+          {mobileSidebarOpen && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 0.6 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setMobileSidebarOpen(false)}
+                className="fixed inset-0 bg-slate-950 z-50 md:hidden"
               />
-            ) : (
-              <>
-                {activeTab === "dashboard" && isActionAllowed(usuario.role, "dashboard") && (
-                  <DashboardOverview
-                    vehicles={usuario && usuario.role === UserRole.Cliente && usuario.clienteId
-                      ? vehicles.filter(v => v.cliente.id === usuario.clienteId)
-                      : vehicles
-                    }
-                    maintenances={maintenances}
-                    inventory={inventory}
-                    activities={activities}
-                    userRole={usuario.role}
-                    onNavigateToTab={navigateToTab}
-                    onRestockItem={handleRestockItem}
-                    onOpenVehicleMaint={handleOpenVehicleMaint}
-                    onUpdateVehicleStatus={handleUpdateVehicleStatus}
-                  />
-                )}
-
-                {activeTab === "bsc" && isActionAllowed(usuario.role, "bsc") && (
-                  <BalancedScorecard
-                    vehicles={vehicles}
-                    maintenances={maintenances}
-                    inventory={inventory}
-                    appointments={appointments}
-                    surveys={surveys}
-                    redemptions={redemptions}
-                    userRole={usuario.role}
-                  />
-                )}
-
-                {activeTab === "vehicles" && isActionAllowed(usuario.role, "vehicles") && (
-                  <VehicleManager
-                    vehicles={(usuario && usuario.role === UserRole.Cliente && usuario.clienteId
-                      ? vehicles.filter(v => v.cliente.id === usuario.clienteId)
-                      : vehicles
-                    ).filter(v => v.estado !== "Entregado")}
-                    userRole={usuario.role}
-                    onRegisterVehicle={handleRegisterVehicle}
-                    onSelectVehicle={handleOpenVehicleMaint}
-                    onDeleteVehicle={handleDeleteVehicle}
-                  />
-                )}
-
-                {activeTab === "bitacoras" && isActionAllowed(usuario.role, "bitacoras") && (
-                  <BitacorasManager
-                    vehicles={usuario && usuario.role === UserRole.Cliente && usuario.clienteId
-                      ? vehicles.filter(v => v.cliente.id === usuario.clienteId)
-                      : vehicles
-                    }
-                    maintenances={maintenances}
-                    userRole={usuario.role}
-                    onSelectVehicle={handleOpenVehicleMaint}
-                    onDeleteVehicle={handleDeleteVehicle}
-                  />
-                )}
-
-                {activeTab === "inventory" && isActionAllowed(usuario.role, "inventory") && (
-                  <InventoryManager
-                    inventory={inventory}
-                    userRole={usuario.role}
-                    onRestockItem={handleRestockItem}
-                    onAddNewPart={handleAddNewPartToInventory}
-                    onDeletePart={handleDeletePartFromInventory}
-                  />
-                )}
-
-                {activeTab === "appointments" && isActionAllowed(usuario.role, "appointments") && (
-                  <AppointmentsManager
-                    appointments={appointments}
-                    userRole={usuario.role}
-                    onRegisterVehicle={handleRegisterVehicle}
-                  />
-                )}
-
-                {activeTab === "architecture" && isActionAllowed(usuario.role, "architecture") && (
-                  <ArchitectureGuide 
-                    vehicles={vehicles}
-                    maintenances={maintenances}
-                    inventory={inventory}
-                  />
-                )}
-
-                {activeTab === "loyalty" && isActionAllowed(usuario.role, "loyalty") && (
-                  <LoyaltyRewardsCenter
-                    vehicles={vehicles}
-                    maintenances={maintenances}
-                    surveys={surveys}
-                    redemptions={redemptions}
-                    userRole={usuario.role}
-                    clienteId={usuario.clienteId}
-                    clienteNombre={usuario.fullName}
-                  />
-                )}
-              </>
-            )}
-          </motion.div>
+              <motion.aside
+                initial={{ x: "-100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "-100%" }}
+                transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                className="fixed inset-y-0 left-0 w-72 bg-slate-900 border-r border-slate-800 text-slate-300 z-50 flex flex-col md:hidden p-4 shadow-2xl"
+              >
+                <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+                  <CQMotorsLogo size="sm" />
+                  <button
+                    onClick={() => setMobileSidebarOpen(false)}
+                    className="p-2 hover:bg-slate-800 rounded-xl text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <div className="flex-1 py-4 space-y-2 overflow-y-auto">
+                  {navItems.map(item => {
+                    const isActive = activeTab === item.id && !selectedVehicle;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          navigateToTab(item.id);
+                          setMobileSidebarOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-start px-4 py-3 rounded-xl text-xs font-bold transition-all ${
+                          isActive
+                            ? "bg-emerald-600 text-white"
+                            : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                        }`}
+                      >
+                        <div className="mr-3">{item.icon}</div>
+                        <span className="flex-1 text-left">{item.label}</span>
+                        {item.badge && <span className={item.badgeClass}>{item.badge}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </motion.aside>
+            </>
+          )}
         </AnimatePresence>
-      </main>
+
+        {/* CORE FRAMEWORK BODY LAYOUT */}
+        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 overflow-x-hidden">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={selectedVehicle ? `maint-${selectedVehicle.id}` : activeTab}
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -5 }}
+              transition={{ duration: 0.2 }}
+              className="focus:outline-none"
+            >
+              {/* If a vehicle sheet is specifically selected, bypass regular tabs to keep user focus! */}
+              {selectedVehicle && isActionAllowed(usuario.role, "vehicles", selectedVehicle.id) ? (
+                <MaintenanceSheet
+                  vehicle={vehicles.find(v => v.id === selectedVehicle.id) || selectedVehicle}
+                  vehicleMaintenances={maintenances.filter(m => m.vehiculoId === selectedVehicle.id)}
+                  inventory={inventory}
+                  userRole={usuario.role}
+                  onGoBack={() => setSelectedVehicle(null)}
+                  onUpdateMaintenance={handleUpdateMaintenance}
+                  onUpdateVehicleStatus={handleUpdateVehicleStatus}
+                  onUpdateVehiclePhotos={handleUpdateVehiclePhotos}
+                  onUpdateVehicleCoverImage={handleUpdateVehicleCoverImage}
+                  onDeleteVehicle={handleDeleteVehicle}
+                />
+              ) : (
+                <>
+                  {activeTab === "dashboard" && isActionAllowed(usuario.role, "dashboard") && (
+                    <DashboardOverview
+                      vehicles={usuario && usuario.role === UserRole.Cliente && usuario.clienteId
+                        ? vehicles.filter(v => v.cliente.id === usuario.clienteId)
+                        : vehicles
+                      }
+                      maintenances={maintenances}
+                      inventory={inventory}
+                      activities={activities}
+                      userRole={usuario.role}
+                      onNavigateToTab={navigateToTab}
+                      onRestockItem={handleRestockItem}
+                      onOpenVehicleMaint={handleOpenVehicleMaint}
+                      onUpdateVehicleStatus={handleUpdateVehicleStatus}
+                    />
+                  )}
+
+                  {activeTab === "bsc" && isActionAllowed(usuario.role, "bsc") && (
+                    <BalancedScorecard
+                      vehicles={vehicles}
+                      maintenances={maintenances}
+                      inventory={inventory}
+                      appointments={appointments}
+                      surveys={surveys}
+                      redemptions={redemptions}
+                      userRole={usuario.role}
+                    />
+                  )}
+
+                  {activeTab === "vehicles" && isActionAllowed(usuario.role, "vehicles") && (
+                    <VehicleManager
+                      vehicles={(usuario && usuario.role === UserRole.Cliente && usuario.clienteId
+                        ? vehicles.filter(v => v.cliente.id === usuario.clienteId)
+                        : vehicles
+                      ).filter(v => v.estado !== "Entregado")}
+                      userRole={usuario.role}
+                      onRegisterVehicle={handleRegisterVehicle}
+                      onSelectVehicle={handleOpenVehicleMaint}
+                      onDeleteVehicle={handleDeleteVehicle}
+                    />
+                  )}
+
+                  {activeTab === "bitacoras" && isActionAllowed(usuario.role, "bitacoras") && (
+                    <BitacorasManager
+                      vehicles={usuario && usuario.role === UserRole.Cliente && usuario.clienteId
+                        ? vehicles.filter(v => v.cliente.id === usuario.clienteId)
+                        : vehicles
+                      }
+                      maintenances={maintenances}
+                      userRole={usuario.role}
+                      onSelectVehicle={handleOpenVehicleMaint}
+                      onDeleteVehicle={handleDeleteVehicle}
+                    />
+                  )}
+
+                  {activeTab === "inventory" && isActionAllowed(usuario.role, "inventory") && (
+                    <InventoryManager
+                      inventory={inventory}
+                      userRole={usuario.role}
+                      onRestockItem={handleRestockItem}
+                      onAddNewPart={handleAddNewPartToInventory}
+                      onDeletePart={handleDeletePartFromInventory}
+                    />
+                  )}
+
+                  {activeTab === "appointments" && isActionAllowed(usuario.role, "appointments") && (
+                    <AppointmentsManager
+                      appointments={appointments}
+                      userRole={usuario.role}
+                      onRegisterVehicle={handleRegisterVehicle}
+                    />
+                  )}
+
+                  {activeTab === "architecture" && isActionAllowed(usuario.role, "architecture") && (
+                    <ArchitectureGuide 
+                      vehicles={vehicles}
+                      maintenances={maintenances}
+                      inventory={inventory}
+                    />
+                  )}
+
+                  {activeTab === "loyalty" && isActionAllowed(usuario.role, "loyalty") && (
+                    <LoyaltyRewardsCenter
+                      vehicles={vehicles}
+                      maintenances={maintenances}
+                      surveys={surveys}
+                      redemptions={redemptions}
+                      userRole={usuario.role}
+                      clienteId={usuario.clienteId}
+                      clienteNombre={usuario.fullName}
+                    />
+                  )}
+                </>
+              )}
+            </motion.div>
+          </AnimatePresence>
+        </main>
+      </div>
 
       {/* SYSTEM REGISTRATION FOOTER FOOTPRINT */}
       <footer className="bg-white border-t border-slate-205/85 py-5 text-center text-xs text-slate-400 font-sans mt-12">
