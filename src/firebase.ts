@@ -55,15 +55,6 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   };
-
-  // FIX CODE-6: Do NOT log the full errInfo (which contains email, UID, providerInfo — PII)
-  // to the browser console where it is visible in DevTools.
-  // Only log the operational context (error type, path) \u2014 no auth details.
-  console.error('Firestore Error:', {
-    error: errInfo.error,
-    operationType: errInfo.operationType,
-    path: errInfo.path
-    // authInfo intentionally omitted from console output to protect PII
-  });
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }

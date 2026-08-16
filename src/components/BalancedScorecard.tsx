@@ -366,7 +366,7 @@ export default function BalancedScorecard({
           }`}
         >
           <Users className="w-3.5 h-3.5 text-sky-500" />
-          <span>Clientes {"&"} CRM</span>
+          <span>Clientes & CRM</span>
         </button>
         <button
           onClick={() => setActiveTab("procesos")}
@@ -388,7 +388,7 @@ export default function BalancedScorecard({
           }`}
         >
           <GraduationCap className="w-3.5 h-3.5 text-fuchsia-500" />
-          <span>Aprendizaje {"&"} TICs</span>
+          <span>Aprendizaje & TICs</span>
         </button>
         <button
           onClick={() => setActiveTab("iniciativas")}
@@ -521,7 +521,7 @@ export default function BalancedScorecard({
                           <span className="text-[10px] font-black uppercase text-sky-800 font-mono tracking-wider bg-white border border-sky-150 px-2 py-0.5 rounded-md">
                             2. Perspectiva del Cliente
                           </span>
-                          <h4 className="text-xs font-bold text-slate-900 mt-1">Fidelización Absoluta {"&"} Confianza del Cliente</h4>
+                          <h4 className="text-xs font-bold text-slate-900 mt-1">Fidelización Absoluta & Confianza del Cliente</h4>
                           <p className="text-[11px] text-slate-600">Garantizar una experiencia transparente con fotos reales, recompensas en club de fidelidad y encuestas.</p>
                         </div>
                         <div className="text-right shrink-0">
@@ -573,7 +573,7 @@ export default function BalancedScorecard({
                       <div className="flex items-start justify-between">
                         <div className="space-y-1">
                           <span className="text-[10px] font-black uppercase text-fuchsia-800 font-mono tracking-wider bg-white border border-fuchsia-150 px-2 py-0.5 rounded-md">
-                            4. Perspectiva de Aprendizaje {"&"} Crecimiento
+                            4. Perspectiva de Aprendizaje & Crecimiento
                           </span>
                           <h4 className="text-xs font-bold text-slate-900 mt-1">Capacitación Tecnológica y Herramientas Digitales</h4>
                           <p className="text-[11px] text-slate-600">Adopción del diagnóstico con mapa de daños 360° y uso del CRM Predictivo (clasificaciones Trabajo / Particular).</p>
@@ -687,7 +687,7 @@ export default function BalancedScorecard({
               <div className="space-y-6">
                 <div>
                   <h3 className="font-display font-black text-lg text-slate-900 flex items-center gap-1.5">
-                    <Users className="w-5 h-5 text-sky-600" /> Perspectiva del Cliente: Fidelidad {"&"} CSAT
+                    <Users className="w-5 h-5 text-sky-600" /> Perspectiva del Cliente: Fidelidad & CSAT
                   </h3>
                   <p className="text-xs text-slate-500">Monitoreo de confianza, satisfacción con el servicio técnico y la atención comercial.</p>
                 </div>
@@ -849,7 +849,7 @@ export default function BalancedScorecard({
               <div className="space-y-6">
                 <div>
                   <h3 className="font-display font-black text-lg text-slate-900 flex items-center gap-1.5">
-                    <GraduationCap className="w-5 h-5 text-fuchsia-600" /> Perspectiva de Aprendizaje {"&"} TICs: Innovación del Taller
+                    <GraduationCap className="w-5 h-5 text-fuchsia-600" /> Perspectiva de Aprendizaje & TICs: Innovación del Taller
                   </h3>
                   <p className="text-xs text-slate-500">Métricas de adopción de la aplicación digital, mapa visual de daños e historial de predicciones de odómetro.</p>
                 </div>
@@ -926,9 +926,9 @@ export default function BalancedScorecard({
                           className="w-full px-3 py-2 text-xs border rounded-xl bg-white border-slate-300 focus:outline-none"
                         >
                           <option value="Financiera">💰 Financiera</option>
-                          <option value="Clientes">👥 Clientes {"&"} CRM</option>
+                          <option value="Clientes">👥 Clientes & CRM</option>
                           <option value="Procesos">⚙️ Procesos Internos</option>
-                          <option value="Aprendizaje">🎓 Aprendizaje {"&"} TICs</option>
+                          <option value="Aprendizaje">🎓 Aprendizaje & TICs</option>
                         </select>
                       </div>
 

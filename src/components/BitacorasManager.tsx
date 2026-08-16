@@ -40,6 +40,8 @@ export default function BitacorasManager({
 }: BitacorasManagerProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedQRVehicle, setSelectedQRVehicle] = useState<Vehiculo | null>(null);
+  const [vehicleToDelete, setVehicleToDelete] = useState<Vehiculo | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Filter vehicles (All of them, including active & delivered)
   const filteredVehicles = vehicles.filter((v) => {
@@ -101,7 +103,7 @@ export default function BitacorasManager({
               <BookOpen className="h-5 w-5" />
             </div>
             <span className="text-xs uppercase font-extrabold tracking-widest text-emerald-400 font-mono">
-              Expediente Digital Perpetuo {"&"} CRM Predictivo
+              Expediente Digital Perpetuo & CRM Predictivo
             </span>
           </div>
           <h2 className="font-display font-extrabold text-2xl sm:text-3xl text-slate-100 tracking-tight">
@@ -242,12 +244,10 @@ export default function BitacorasManager({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (confirm(`¿Está seguro de eliminar la hoja de control de patio (bitácora) para el vehículo con placa ${v.placa}? Esta acción borrará la ficha, historial y no se puede deshacer.`)) {
-                              onDeleteVehicle(v.id);
-                            }
+                            setVehicleToDelete(v);
                           }}
-                          className="p-1 text-rose-500 hover:text-rose-750 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-200"
-                          title="Eliminar bitácora histórica"
+                          className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-200 cursor-pointer"
+                          title="Eliminar bitácora y hoja de patio"
                         >
                           <Trash2 className="h-4 w-4 shrink-0" />
                         </button>
@@ -323,7 +323,7 @@ export default function BitacorasManager({
                         </span>
                       </div>
                       <div>
-                        <span className="text-slate-450 block text-[9px] uppercase font-semibold">Próximo Filtro {"&"} Aceite</span>
+                        <span className="text-slate-450 block text-[9px] uppercase font-semibold">Próximo Filtro & Aceite</span>
                         <span className="font-sans font-bold text-slate-800 flex items-center space-x-1 mt-0.5">
                           <Calendar className={`h-3 w-3 inline ${crmPred.alertState === "urgent" ? "text-rose-600 animate-bounce" : "text-emerald-650"}`} />
                           <span className={crmPred.alertState === "urgent" ? "text-rose-700 font-black" : ""}>
@@ -530,7 +530,7 @@ export default function BitacorasManager({
                   <div className="w-full text-center text-[8px] text-slate-450 border-t pt-3 border-dashed border-slate-200">
                     Pegar en el margen superior del parabrisas del auto.
                     <br />
-                    <span>Soporte CQ Motors {"•"} Historial Médico QR</span>
+                    <span>Soporte CQ Motors &bull; Historial Médico QR</span>
                   </div>
                 </div>
 
@@ -562,6 +562,69 @@ export default function BitacorasManager({
                   </button>
                 </div>
 
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* CONFIRM DELETE BITACORA / VEHICLE MODAL */}
+      <AnimatePresence>
+        {vehicleToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200"
+            >
+              <div className="p-6 space-y-4">
+                <div className="flex items-center space-x-3">
+                  <div className="p-3 bg-rose-100 text-rose-600 rounded-xl">
+                    <Trash2 className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 font-display">
+                      Eliminar Bitácora de Patio
+                    </h3>
+                    <p className="text-xs text-slate-500 font-mono">
+                      Placa: {vehicleToDelete.placa} ({vehicleToDelete.marca} {vehicleToDelete.modelo})
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-3.5 bg-rose-50 border border-rose-100 rounded-xl text-xs text-rose-900 leading-relaxed">
+                  ¿Está seguro de eliminar esta hoja de control de patio y bitácora histórica? Esta acción borrará el registro del vehículo, su historial de mantenimiento y no se puede deshacer.
+                </div>
+
+                <div className="flex items-center justify-end space-x-3 pt-2">
+                  <button
+                    type="button"
+                    disabled={isDeleting}
+                    onClick={() => setVehicleToDelete(null)}
+                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isDeleting}
+                    onClick={async () => {
+                      if (!onDeleteVehicle) return;
+                      setIsDeleting(true);
+                      try {
+                        await onDeleteVehicle(vehicleToDelete.id);
+                        setVehicleToDelete(null);
+                      } finally {
+                        setIsDeleting(false);
+                      }
+                    }}
+                    className="px-5 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition-colors flex items-center space-x-1.5 shadow-sm cursor-pointer"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>{isDeleting ? "Eliminando..." : "Sí, Eliminar Bitácora"}</span>
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>

@@ -33,7 +33,11 @@ import {
   History,
   FileText,
   Printer,
-  X
+  X,
+  UserCheck,
+  PackagePlus,
+  Store,
+  Tag
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useToast } from "./Toast";
@@ -120,12 +124,19 @@ export default function MaintenanceSheet({
   const [tempCostoInput, setTempCostoInput] = useState<Record<string, string>>({});
 
   // New spare parts utility
+  const [partSourceType, setPartSourceType] = useState<"bodega" | "cliente" | "externo">("bodega");
   const [selectedRepuestoId, setSelectedRepuestoId] = useState("");
   const [selectedRepuestoCant, setSelectedRepuestoCant] = useState(1);
+  const [customPartNombre, setCustomPartNombre] = useState("");
+  const [customPartCant, setCustomPartCant] = useState(1);
+  const [customPartCosto, setCustomPartCosto] = useState<string>("0");
+  const [customPartNotas, setCustomPartNotas] = useState("");
   const [dispenseError, setDispenseError] = useState("");
 
   // Toast notification alert simulator
   const [simulationToast, setSimulationToast] = useState("");
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+  const [isDeletingVehicle, setIsDeletingVehicle] = useState(false);
 
   // Photo gallery local controllers
   const [newPhotoUrl, setNewPhotoUrl] = useState("");
@@ -253,9 +264,11 @@ export default function MaintenanceSheet({
   const completedCount = tareas.filter(t => t.completada).length;
   const progressPercent = tareas.length ? Math.round((completedCount / tareas.length) * 100) : 0;
 
-  // Calculate spare parts cost sum
+  // Calculate tasks cost sum, spare parts cost sum, and full total
+  const totalTareasCosto = tareas.reduce((acc, t) => acc + (t.costoEstimado || 0), 0);
   const totalRepuestosCosto = repuestosExp.reduce((acc, r) => acc + (r.costoUnitario * r.cantidad), 0);
-  const totalFinalCompleto = totalRepuestosCosto + costoManoObra;
+  const totalServiciosManoObra = totalTareasCosto + costoManoObra;
+  const totalFinalCompleto = totalTareasCosto + totalRepuestosCosto + costoManoObra;
 
   // Save updates helper
   const handlePersistChanges = (
@@ -266,12 +279,13 @@ export default function MaintenanceSheet({
     overrideDiagnostico?: string,
     overrideRecordatorioMeses?: number
   ) => {
+    const tasksSum = updatedTareas.reduce((acc, t) => acc + (t.costoEstimado || 0), 0);
     const partsSum = updatedParts.reduce((acc, r) => acc + (r.costoUnitario * r.cantidad), 0);
-    const calculatedTotal = partsSum + updatedManoObra;
+    const calculatedTotal = tasksSum + partsSum + updatedManoObra;
 
-    // Costo Primo (CPr) = direct labor + sum of raw materials purchase cost
+    // Costo Primo (CPr) = direct labor + tasks costs + sum of raw materials purchase cost
     const partsPurchaseSum = updatedParts.reduce((acc, r) => acc + ((r.costoCompraUnitario || r.costoUnitario * 0.7) * r.cantidad), 0);
-    const calculatedCPr = updatedManoObra + partsPurchaseSum;
+    const calculatedCPr = updatedManoObra + tasksSum + partsPurchaseSum;
 
     onUpdateMaintenance({
       ...activeMaint,
@@ -329,7 +343,7 @@ export default function MaintenanceSheet({
     setDispenseError("");
 
     if (!selectedRepuestoId) {
-      setDispenseError("Seleccione un componente válido.");
+      setDispenseError("Seleccione un componente válido de la bodega.");
       return;
     }
 
@@ -357,11 +371,12 @@ export default function MaintenanceSheet({
         cantidad: selectedRepuestoCant,
         costoUnitario: itemInventario.precioVenta,
         costoCompraUnitario: itemInventario.costoCompra || (itemInventario.precioVenta * 0.7),
-        surtido: true // Pre-approved in demo
+        surtido: true,
+        origen: "bodega",
+        imagenUrl: itemInventario.imagenUrl
       });
     }
 
-    // Deduct stock from the mock state (this runs in App.tsx dynamically under handleUpdateMaintenance)
     setRepuestosExp(nextParts);
     setSelectedRepuestoId("");
     setSelectedRepuestoCant(1);
@@ -370,7 +385,70 @@ export default function MaintenanceSheet({
     itemInventario.stock -= selectedRepuestoCant;
 
     handlePersistChanges(tareas, nextParts);
-    triggerNotification(`Despachado: ${selectedRepuestoCant} unidad(es) de "${itemInventario.nombre}" asignadas a la Orden.`);
+    triggerNotification(`Despachado: ${selectedRepuestoCant} u. de "${itemInventario.nombre}" asignadas desde bodega.`);
+  };
+
+  // Add custom spare part (traído por el cliente o comprado fuera)
+  const handleAddCustomSparePart = (e: React.FormEvent) => {
+    e.preventDefault();
+    setDispenseError("");
+
+    if (!customPartNombre.trim()) {
+      setDispenseError("Ingrese el nombre o descripción del repuesto.");
+      return;
+    }
+
+    const isClient = partSourceType === "cliente";
+    const parsedCost = isClient ? 0 : Math.max(0, parseFloat(customPartCosto) || 0);
+
+    const newCustomPart: RepuestoRequerido = {
+      id: `req-custom-${Date.now()}`,
+      repuestoId: isClient ? `cli-${Date.now()}` : `ext-${Date.now()}`,
+      nombre: customPartNombre.trim(),
+      cantidad: Math.max(1, customPartCant),
+      costoUnitario: parsedCost,
+      costoCompraUnitario: 0,
+      surtido: true,
+      origen: partSourceType,
+      notas: customPartNotas.trim() || (isClient ? "Aportado directamente por el cliente" : "Adquisición en distribuidor externo"),
+      imagenUrl: isClient 
+        ? "https://images.unsplash.com/photo-1486006920555-c77dce18193b?q=80&w=200&auto=format&fit=crop"
+        : "https://images.unsplash.com/photo-1580273916550-e323be2ae537?q=80&w=200&auto=format&fit=crop"
+    };
+
+    const nextParts = [...repuestosExp, newCustomPart];
+    setRepuestosExp(nextParts);
+    setCustomPartNombre("");
+    setCustomPartCant(1);
+    setCustomPartCosto(isClient ? "0" : "20");
+    setCustomPartNotas("");
+    
+    handlePersistChanges(tareas, nextParts);
+    showSuccess(
+      isClient ? "Repuesto de Cliente Registrado" : "Repuesto Externo Registrado",
+      isClient 
+        ? `"${newCustomPart.nombre}" registrado sin cargo ($0.00). No descuenta stock del taller.`
+        : `"${newCustomPart.nombre}" registrado con valor de $${parsedCost.toFixed(2)}.`
+    );
+  };
+
+  // Remove spare part and restore stock if from warehouse
+  const handleRemoveSparePart = (partId: string) => {
+    const partToRemove = repuestosExp.find(p => p.id === partId);
+    if (!partToRemove) return;
+
+    // If it was from internal inventory, restore stock
+    if (partToRemove.origen === "bodega" || (!partToRemove.origen && !partToRemove.repuestoId.startsWith("cli-") && !partToRemove.repuestoId.startsWith("ext-"))) {
+      const invItem = inventory.find(i => i.id === partToRemove.repuestoId);
+      if (invItem) {
+        invItem.stock += partToRemove.cantidad;
+      }
+    }
+
+    const nextParts = repuestosExp.filter(p => p.id !== partId);
+    setRepuestosExp(nextParts);
+    handlePersistChanges(tareas, nextParts);
+    showInfo("Repuesto Retirado", `Se eliminó "${partToRemove.nombre}" de la hoja de mantenimiento.`);
   };
 
   // COTIZADOR VELOZ - INTERACTION HANDLER (7th of 8 improvements)
@@ -396,7 +474,9 @@ export default function MaintenanceSheet({
         cantidad: 1,
         costoUnitario: itemInventario.precioVenta,
         costoCompraUnitario: itemInventario.costoCompra || (itemInventario.precioVenta * 0.7),
-        surtido: true
+        surtido: true,
+        origen: "bodega",
+        imagenUrl: itemInventario.imagenUrl
       });
     }
 
@@ -481,12 +561,8 @@ export default function MaintenanceSheet({
 
           {userRole !== UserRole.Cliente && onDeleteVehicle && (
             <button
-              onClick={() => {
-                if (confirm(`¿Está seguro de eliminar esta hoja de control de patio para el vehículo ${vehicle.placa}? Esta acción borrará la ficha, historial y no se puede deshacer.`)) {
-                  onDeleteVehicle(vehicle.id);
-                  onGoBack();
-                }
-              }}
+              type="button"
+              onClick={() => setShowDeleteConfirmModal(true)}
               className="px-3.5 py-2 bg-rose-900/60 hover:bg-rose-700 text-rose-100 hover:text-white border border-rose-800/80 font-bold rounded-xl text-xs flex items-center space-x-1.5 transition-all cursor-pointer shadow-md"
               title="Eliminar hoja de control de patio"
             >
@@ -519,7 +595,7 @@ export default function MaintenanceSheet({
               <History className="h-5 w-5 shrink-0" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-100 text-base tracking-tight">Expediente {"&"} Bitácora Automotriz</h3>
+              <h3 className="font-bold text-slate-100 text-base tracking-tight">Expediente & Bitácora Automotriz</h3>
               <p className="text-xs text-slate-400">Historial técnico multipuntos y registros cronológicos de servicio</p>
             </div>
           </div>
@@ -1009,49 +1085,252 @@ export default function MaintenanceSheet({
                 <h3 className="font-bold text-slate-900 text-base">Plan de Repuestos del Vehículo</h3>
               </div>
               <span className="text-[10px] bg-emerald-50 text-emerald-800 font-bold px-2 py-0.5 rounded border border-emerald-100 uppercase tracking-widest font-mono">
-                Inventario Integrado
+                Bodega / Cliente / Externos
               </span>
             </div>
 
             {/* Dynamic part request form (Hidden for Client) */}
             {userRole !== UserRole.Cliente ? (
-              <form onSubmit={handleRequestSparePart} className="space-y-3.5 bg-slate-50 p-4 rounded-xl border border-slate-200/50">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block">Seleccionar Repuesto Bodega *</label>
-                  <select
-                    value={selectedRepuestoId}
-                    onChange={(e) => { setSelectedRepuestoId(e.target.value); setDispenseError(""); }}
-                    className="w-full bg-white border border-slate-200 text-xs font-semibold py-2 px-3 rounded-xl focus:outline-none cursor-pointer"
+              <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200/60">
+                {/* Origin Tabs */}
+                <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-200/80 rounded-xl text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => { setPartSourceType("bodega"); setDispenseError(""); }}
+                    className={`py-1.5 px-2 rounded-lg transition-all flex items-center justify-center space-x-1 cursor-pointer text-[11px] ${
+                      partSourceType === "bodega"
+                        ? "bg-white text-slate-900 shadow-sm"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
                   >
-                    <option value="">-- Buscar Componente en Existencia --</option>
-                    {inventory.map((item) => (
-                      <option key={item.id} value={item.id} disabled={item.stock === 0}>
-                        {item.nombre} - [Código {item.codigo}] (Disp: {item.stock} u. | ${item.precioVenta.toFixed(2)})
-                      </option>
-                    ))}
-                  </select>
+                    <Store className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    <span>De Bodega</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setPartSourceType("cliente"); setCustomPartCosto("0"); setDispenseError(""); }}
+                    className={`py-1.5 px-2 rounded-lg transition-all flex items-center justify-center space-x-1 cursor-pointer text-[11px] ${
+                      partSourceType === "cliente"
+                        ? "bg-purple-600 text-white shadow-sm"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    <UserCheck className="h-3.5 w-3.5 shrink-0" />
+                    <span>Traído x Cliente</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setPartSourceType("externo"); setCustomPartCosto("25"); setDispenseError(""); }}
+                    className={`py-1.5 px-2 rounded-lg transition-all flex items-center justify-center space-x-1 cursor-pointer text-[11px] ${
+                      partSourceType === "externo"
+                        ? "bg-amber-600 text-white shadow-sm"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    <PackagePlus className="h-3.5 w-3.5 shrink-0" />
+                    <span>Comprado Fuera</span>
+                  </button>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 items-end">
-                  <div className="col-span-1 space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">Cantidad *</label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={selectedRepuestoCant}
-                      onChange={(e) => setSelectedRepuestoCant(Math.max(1, Number(e.target.value)))}
-                      className="w-full px-3 py-2 border rounded-xl bg-white border-slate-200 focus:outline-none focus:border-emerald-500 text-xs font-bold font-mono"
-                    />
-                  </div>
-                  <div className="col-span-2">
+                {/* TAB 1: BODEGA CQ MOTORS */}
+                {partSourceType === "bodega" && (
+                  <form onSubmit={handleRequestSparePart} className="space-y-3 pt-1">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block">Seleccionar Repuesto Bodega *</label>
+                      <select
+                        value={selectedRepuestoId}
+                        onChange={(e) => { setSelectedRepuestoId(e.target.value); setDispenseError(""); }}
+                        className="w-full bg-white border border-slate-200 text-xs font-semibold py-2 px-3 rounded-xl focus:outline-none cursor-pointer"
+                      >
+                        <option value="">-- Buscar Componente en Existencia --</option>
+                        {inventory.map((item) => (
+                          <option key={item.id} value={item.id} disabled={item.stock === 0}>
+                            {item.nombre} - [Código {item.codigo}] (Disp: {item.stock} u. | ${item.precioVenta.toFixed(2)})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 items-end">
+                      <div className="col-span-1 space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Cantidad *</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={selectedRepuestoCant}
+                          onChange={(e) => setSelectedRepuestoCant(Math.max(1, Number(e.target.value)))}
+                          className="w-full px-3 py-2 border rounded-xl bg-white border-slate-200 focus:outline-none focus:border-emerald-500 text-xs font-bold font-mono"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <button
+                          type="submit"
+                          className="w-full py-2 bg-slate-900 hover:bg-emerald-600 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer"
+                        >
+                          Asignar de Bodega
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Sugerencias Rápidas */}
+                    <div className="pt-2 border-t border-slate-200/50 mt-2">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5 flex items-center gap-1 font-mono">
+                        <Sparkles className="h-3.5 w-3.5 text-emerald-500" />
+                        <span>Sugeridos para {vehicle.marca} {vehicle.modelo}</span>
+                      </span>
+                      <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                        {getSmartPartsForVehicle(vehicle.marca, vehicle.modelo, inventory).map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => handleQuickAddRecommendedPart(p.id)}
+                            className="p-1.5 bg-white hover:bg-emerald-50/30 border border-slate-200 hover:border-emerald-400 rounded-xl flex items-center justify-between text-slate-700 hover:text-emerald-950 transition-all font-sans text-left cursor-pointer group shadow-sm"
+                          >
+                            <div className="truncate pr-1 flex-1 min-w-0">
+                              <span className="font-bold block truncate text-[11px] text-slate-800 group-hover:text-emerald-900">{p.nombre}</span>
+                              <span className="text-[9px] text-slate-400 font-mono block">${p.precioVenta.toFixed(2)} • x{p.stock}</span>
+                            </div>
+                            <span className="bg-slate-100 group-hover:bg-emerald-100 group-hover:text-emerald-800 p-1 rounded font-extrabold shrink-0 transition-all uppercase tracking-wider text-[8px]">
+                              + Añadir
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </form>
+                )}
+
+                {/* TAB 2: TRAÍDO POR EL CLIENTE ($0.00) */}
+                {partSourceType === "cliente" && (
+                  <form onSubmit={handleAddCustomSparePart} className="space-y-3 pt-1">
+                    <div className="p-2.5 bg-purple-50 border border-purple-200/70 rounded-xl text-purple-900 text-[11px] leading-relaxed flex items-start space-x-2">
+                      <UserCheck className="h-4 w-4 text-purple-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold block">Repuesto provisto por el cliente</span>
+                        <span>No se cobrará por la pieza ($0.00) ni se descontará stock de bodega. Queda registrado en el historial técnico para fines de garantía de mano de obra.</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block">Nombre del Repuesto traído por el cliente *</label>
+                      <input
+                        type="text"
+                        value={customPartNombre}
+                        onChange={(e) => setCustomPartNombre(e.target.value)}
+                        placeholder="Ej: Kit de embrague, 4L Aceite Sintético 5W-30, Pastillas..."
+                        className="w-full px-3 py-2 border rounded-xl bg-white border-slate-200 focus:outline-none focus:border-purple-500 text-xs font-semibold"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Cantidad *</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={customPartCant}
+                          onChange={(e) => setCustomPartCant(Math.max(1, Number(e.target.value)))}
+                          className="w-full px-3 py-2 border rounded-xl bg-white border-slate-200 focus:outline-none focus:border-purple-500 text-xs font-bold font-mono"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Costo al Cliente</label>
+                        <div className="px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-mono font-bold text-purple-700">
+                          $0.00 (Aporte Cliente)
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block">Notas / Marca / Estado (Opcional)</label>
+                      <input
+                        type="text"
+                        value={customPartNotas}
+                        onChange={(e) => setCustomPartNotas(e.target.value)}
+                        placeholder="Ej: Marca Bosch nuevo en caja sellada, traído por el dueño"
+                        className="w-full px-3 py-1.5 border rounded-xl bg-white border-slate-200 focus:outline-none focus:border-purple-500 text-xs"
+                      />
+                    </div>
+
                     <button
                       type="submit"
-                      className="w-full py-2 bg-slate-900 hover:bg-emerald-600 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer"
+                      className="w-full py-2 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer flex items-center justify-center space-x-1.5 shadow-sm"
                     >
-                      Asignar y Despachar
+                      <UserCheck className="h-4 w-4" />
+                      <span>Registrar Repuesto de Cliente</span>
                     </button>
-                  </div>
-                </div>
+                  </form>
+                )}
+
+                {/* TAB 3: COMPRADO EN OTRO LUGAR / EXTERNO */}
+                {partSourceType === "externo" && (
+                  <form onSubmit={handleAddCustomSparePart} className="space-y-3 pt-1">
+                    <div className="p-2.5 bg-amber-50 border border-amber-200/70 rounded-xl text-amber-900 text-[11px] leading-relaxed flex items-start space-x-2">
+                      <PackagePlus className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold block">Adquisición en distribuidor externo</span>
+                        <span>Para repuestos no disponibles en bodega comprados a terceros o bajo encargo especial.</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block">Descripción del Repuesto Externo *</label>
+                      <input
+                        type="text"
+                        value={customPartNombre}
+                        onChange={(e) => setCustomPartNombre(e.target.value)}
+                        placeholder="Ej: Sensor de oxígeno original, Bomba de gasolina..."
+                        className="w-full px-3 py-2 border rounded-xl bg-white border-slate-200 focus:outline-none focus:border-amber-500 text-xs font-semibold"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Cantidad *</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={customPartCant}
+                          onChange={(e) => setCustomPartCant(Math.max(1, Number(e.target.value)))}
+                          className="w-full px-3 py-2 border rounded-xl bg-white border-slate-200 focus:outline-none focus:border-amber-500 text-xs font-bold font-mono"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block">Precio Unitario ($) *</label>
+                        <div className="relative">
+                          <DollarSign className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={customPartCosto}
+                            onChange={(e) => setCustomPartCosto(e.target.value)}
+                            className="w-full pl-7 pr-3 py-2 border rounded-xl bg-white border-slate-200 focus:outline-none focus:border-amber-500 text-xs font-bold font-mono"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block">Almacén / Factura / Proveedor (Opcional)</label>
+                      <input
+                        type="text"
+                        value={customPartNotas}
+                        onChange={(e) => setCustomPartNotas(e.target.value)}
+                        placeholder="Ej: Comprado en Comercial Automotriz, Factura #108"
+                        className="w-full px-3 py-1.5 border rounded-xl bg-white border-slate-200 focus:outline-none focus:border-amber-500 text-xs"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="w-full py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer flex items-center justify-center space-x-1.5 shadow-sm"
+                    >
+                      <PackagePlus className="h-4 w-4" />
+                      <span>Añadir Repuesto Externo</span>
+                    </button>
+                  </form>
+                )}
 
                 {dispenseError && (
                   <div className="p-2.5 bg-rose-50 border border-rose-100 text-rose-800 text-[11px] font-medium rounded-lg flex items-start space-x-1.5">
@@ -1059,79 +1338,97 @@ export default function MaintenanceSheet({
                     <span>{dispenseError}</span>
                   </div>
                 )}
-
-                {/* 💡 RECOMENDADOR INTELIGENTE DE REPUESTOS POR MODELO (7th of 8 improvements) */}
-                <div className="pt-2.5 border-t border-slate-200/50 mt-3.5">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-2 flex items-center gap-1 font-mono">
-                    <Sparkles className="h-3.5 w-3.5 text-emerald-500 hover:animate-spin" />
-                    <span>Sugeridos para {vehicle.marca} {vehicle.modelo}</span>
-                  </span>
-                  <div className="grid grid-cols-2 gap-2 text-[11px]">
-                    {getSmartPartsForVehicle(vehicle.marca, vehicle.modelo, inventory).map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => handleQuickAddRecommendedPart(p.id)}
-                        className="p-2 bg-white hover:bg-emerald-50/25 border border-slate-200 hover:border-emerald-405 rounded-xl flex items-center justify-between text-slate-700 hover:text-emerald-950 transition-all font-sans text-left cursor-pointer group shadow-sm-flat"
-                      >
-                        <div className="truncate pr-1.5 flex-1 min-w-0">
-                          <span className="font-bold block truncate text-[11.5px] text-slate-800 group-hover:text-emerald-900">{p.nombre}</span>
-                          <span className="text-[9.5px] text-slate-400 font-mono block mt-0.5">${p.precioVenta.toFixed(2)} • x{p.stock}</span>
-                        </div>
-                        <span className="text-[10px] bg-slate-100 group-hover:bg-emerald-100 group-hover:text-emerald-800 p-1 rounded px-2 font-extrabold shrink-0 transition-all uppercase tracking-wider text-[8.5px]">
-                          + Añadir
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </form>
+              </div>
             ) : (
               <div className="p-4 bg-emerald-50/55 rounded-xl border border-emerald-100/70 text-emerald-950 flex items-start space-x-3 text-xs leading-relaxed">
                 <CheckSquare className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
                 <div>
                   <span className="font-bold text-emerald-900 block mb-0.5">Certificación y Garantía CQ Motors S.A.</span>
-                  <span>Todos los repuestos detallados a continuación corresponden a partes genuinas certificadas por el fabricante con garantía técnica de 12 meses.</span>
+                  <span>Los repuestos e insumos detallados a continuación corresponden al reporte técnico del vehículo.</span>
                 </div>
               </div>
             )}
 
-            {/* List of associated parts with cost */}
+            {/* List of associated parts with cost & origin tags */}
             <div className="space-y-3 pt-1 font-sans">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Repuestos Nuevos Instalados / por Instalar</span>
-              {repuestosExp.length > 0 ? (
-                repuestosExp.map((part) => {
-                  // Find matching inventory item to obtain its premium snapshot picture
-                  const matchPartInInv = inventory.find(i => i.id === part.repuestoId);
-                  const displayPartImg = part.imagenUrl || matchPartInInv?.imagenUrl || "https://images.unsplash.com/photo-1486006920555-c77dce18193b?q=80&w=200&auto=format&fit=crop";
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Repuestos Asociados ({repuestosExp.length})
+                </span>
+                <span className="text-[10px] font-mono text-slate-500 font-bold">
+                  Total: ${totalRepuestosCosto.toFixed(2)}
+                </span>
+              </div>
 
-                  return (
-                    <div key={part.id} className="p-3 bg-slate-50 border border-slate-200/60 rounded-xl flex items-center justify-between gap-3 text-xs">
-                      <div className="flex items-center space-x-3 MIN-W-0">
-                        <img 
-                          src={displayPartImg} 
-                          alt={part.nombre} 
-                          referrerPolicy="no-referrer"
-                          className="h-12 w-12 object-cover rounded-xl border border-slate-200 shrink-0" 
-                        />
-                        <div>
-                          <h5 className="font-bold text-slate-800 truncate">{part.nombre}</h5>
-                          <span className="text-[10px] font-mono text-slate-500 block mt-0.5">
-                            {part.cantidad} unidad(es) {userRole !== UserRole.Cliente && `x $${part.costoUnitario.toFixed(2)}`}
-                          </span>
+              {repuestosExp.length > 0 ? (
+                <div className="space-y-2">
+                  {repuestosExp.map((part) => {
+                    const isClientPart = part.origen === "cliente" || part.repuestoId.startsWith("cli-");
+                    const isExternalPart = part.origen === "externo" || part.repuestoId.startsWith("ext-");
+                    const matchPartInInv = inventory.find(i => i.id === part.repuestoId);
+                    const displayPartImg = part.imagenUrl || matchPartInInv?.imagenUrl || "https://images.unsplash.com/photo-1486006920555-c77dce18193b?q=80&w=200&auto=format&fit=crop";
+
+                    return (
+                      <div key={part.id} className="p-3 bg-slate-50 border border-slate-200/70 rounded-xl flex items-center justify-between gap-3 text-xs hover:border-slate-300 transition-colors">
+                        <div className="flex items-center space-x-3 min-w-0">
+                          <img 
+                            src={displayPartImg} 
+                            alt={part.nombre} 
+                            referrerPolicy="no-referrer"
+                            className="h-11 w-11 object-cover rounded-xl border border-slate-200 shrink-0" 
+                          />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <h5 className="font-bold text-slate-800 truncate">{part.nombre}</h5>
+                              {isClientPart ? (
+                                <span className="px-1.5 py-0.5 bg-purple-100 text-purple-800 text-[9px] font-extrabold rounded uppercase tracking-wider shrink-0 border border-purple-200">
+                                  👤 Traído x Cliente
+                                </span>
+                              ) : isExternalPart ? (
+                                <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[9px] font-extrabold rounded uppercase tracking-wider shrink-0 border border-amber-200">
+                                  🛒 Externo
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 text-[9px] font-extrabold rounded uppercase tracking-wider shrink-0 border border-emerald-200">
+                                  🏢 Bodega
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] font-mono text-slate-500 block mt-0.5">
+                              {part.cantidad} u. {isClientPart ? "• $0.00 (sin cobro)" : (userRole !== UserRole.Cliente && `• x $${part.costoUnitario.toFixed(2)}`)}
+                            </span>
+                            {part.notas && (
+                              <span className="text-[9.5px] text-slate-500 italic block truncate mt-0.5">
+                                📝 {part.notas}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center space-x-2 shrink-0">
+                          {userRole !== UserRole.Cliente && (
+                            <span className={`font-bold font-mono ${isClientPart ? "text-purple-700" : "text-slate-900"}`}>
+                              {isClientPart ? "$0.00" : `$${(part.cantidad * part.costoUnitario).toFixed(2)}`}
+                            </span>
+                          )}
+                          {userRole !== UserRole.Cliente && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSparePart(part.id)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                              title="Quitar repuesto de la orden"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                         </div>
                       </div>
-                      {userRole !== UserRole.Cliente && (
-                        <span className="font-bold text-slate-900 font-mono shrink-0">
-                          ${(part.cantidad * part.costoUnitario).toFixed(2)}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })
+                    );
+                  })}
+                </div>
               ) : (
                 <span className="text-xs text-slate-400 italic block text-center py-2">
-                  Ningún repuesto de bodega asociado a esta reparación todavía.
+                  Ningún repuesto asociado a esta reparación todavía.
                 </span>
               )}
             </div>
@@ -1172,11 +1469,15 @@ export default function MaintenanceSheet({
                 {/* Cost Summary Box */}
                 <div className="p-4 bg-slate-900 text-white rounded-xl space-y-2 border border-slate-800 font-sans shadow-md">
                   <div className="flex items-center justify-between text-xs text-slate-400">
-                    <span>Mano de obra técnica:</span>
+                    <span>Tareas de checklist ({tareas.length}):</span>
+                    <span className="font-mono font-medium">${totalTareasCosto.toFixed(2)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-slate-400">
+                    <span>Mano de obra técnica base:</span>
                     <span className="font-mono font-medium">${costoManoObra.toFixed(2)}</span>
                   </div>
-                  <div className="flex items-center justify-between text-xs text-slate-400 pb-2 border-b border-slate-850">
-                    <span>Suma de Repuestos:</span>
+                  <div className="flex items-center justify-between text-xs text-slate-400 pb-2 border-b border-slate-800">
+                    <span>Suma de Repuestos ({repuestosExp.length}):</span>
                     <span className="font-mono font-medium">${totalRepuestosCosto.toFixed(2)}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm font-bold pt-1.5 pb-2">
@@ -1323,8 +1624,9 @@ export default function MaintenanceSheet({
                         `👤 *Responsable:* ${activeMaint.mecanicoAsignado}\n` +
                         `📅 *Fecha:* ${new Date(activeMaint.fechaRegistro).toLocaleDateString("es-ES")}\n\n` +
                         `*DETALLE ECONÓMICO:*\n` +
-                        `🔧 Mano de Obra: $${costoManoObra.toFixed(2)}\n` +
-                        `📦 Repuestos/Insumos: $${totalRepuestosCosto.toFixed(2)}\n` +
+                        `🛠️ Tareas / Checklist (${tareas.length}): $${totalTareasCosto.toFixed(2)}\n` +
+                        `🔧 Mano de Obra Base: $${costoManoObra.toFixed(2)}\n` +
+                        `📦 Repuestos/Insumos (${repuestosExp.length}): $${totalRepuestosCosto.toFixed(2)}\n` +
                         `📊 Subtotal: $${subtotal.toFixed(2)}\n` +
                         `💰 *TOTAL CON IVA (15%): $${totalFinal.toFixed(2)}*\n\n` +
                         `*Observaciones Técnicas:*\n` +
@@ -1467,8 +1769,16 @@ export default function MaintenanceSheet({
                           </tr>
                         ))}
                         <tr className="bg-slate-50/45 font-semibold border-t border-slate-205">
-                          <td colSpan={3} className="py-3 px-4 text-left font-sans text-slate-705">Mano de Obra y Servicios del Especialista ({activeMaint.mecanicoAsignado})</td>
-                          <td className="py-3 px-4 text-right font-mono text-slate-900">${costoManoObra.toFixed(2)}</td>
+                          <td colSpan={3} className="py-2.5 px-4 text-left font-sans text-slate-705">Subtotal de Tareas y Servicios de Checklist ({tareas.length} ítems)</td>
+                          <td className="py-2.5 px-4 text-right font-mono text-slate-900">${totalTareasCosto.toFixed(2)}</td>
+                        </tr>
+                        <tr className="bg-slate-50/45 font-semibold border-t border-slate-205">
+                          <td colSpan={3} className="py-2.5 px-4 text-left font-sans text-slate-705">Mano de Obra Técnica Especializada ({activeMaint.mecanicoAsignado})</td>
+                          <td className="py-2.5 px-4 text-right font-mono text-slate-900">${costoManoObra.toFixed(2)}</td>
+                        </tr>
+                        <tr className="bg-slate-100/90 font-bold border-t border-slate-300">
+                          <td colSpan={3} className="py-2.5 px-4 text-left font-sans text-slate-900 font-bold">Total Sección I (Servicios & Mano de Obra)</td>
+                          <td className="py-2.5 px-4 text-right font-mono text-emerald-700 font-bold">${totalServiciosManoObra.toFixed(2)}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -1477,21 +1787,26 @@ export default function MaintenanceSheet({
 
                 {/* Replacement Parts Section */}
                 <div className="space-y-3">
-                  <div className="flex items-center space-x-1.5 pb-1 border-b border-slate-100">
-                    <span className="p-1 bg-emerald-50 text-emerald-600 rounded-lg shrink-0">
-                      <ShoppingBag className="h-4 w-4" />
+                  <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                    <div className="flex items-center space-x-1.5">
+                      <span className="p-1 bg-emerald-50 text-emerald-600 rounded-lg shrink-0">
+                        <ShoppingBag className="h-4 w-4" />
+                      </span>
+                      <h4 className="text-xs font-bold text-slate-800 font-display">II. REPUESTOS E INSUMOS REQUERIDOS EN ORDEN</h4>
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-mono">
+                      {repuestosExp.length} ítem(s) registrados
                     </span>
-                    <h4 className="text-xs font-bold text-slate-800 font-display">II. REPUESTOS E INSUMOS REQUERIDOS EN ORDEN</h4>
                   </div>
                   <div className="overflow-hidden border border-slate-150 rounded-xl">
                     <table className="w-full text-left text-xs border-collapse">
                       <thead>
                         <tr className="bg-slate-50 border-b border-slate-150">
                           <th className="py-2.5 px-4 font-bold text-slate-700">Denominación del Repuesto</th>
-                          <th className="py-2.5 px-4 font-bold text-slate-700 text-center w-24">Cantidad</th>
-                          <th className="py-2.5 px-4 font-bold text-slate-700 text-right w-28">Precio Unit.</th>
-                          <th className="py-2.5 px-4 font-bold text-slate-700 text-center w-24">Surtido</th>
-                          <th className="py-2.5 px-4 font-bold text-slate-700 text-right w-28">Total</th>
+                          <th className="py-2.5 px-4 font-bold text-slate-700 text-center w-36">Procedencia</th>
+                          <th className="py-2.5 px-4 font-bold text-slate-700 text-center w-20">Cantidad</th>
+                          <th className="py-2.5 px-4 font-bold text-slate-700 text-right w-24">Precio Unit.</th>
+                          <th className="py-2.5 px-4 font-bold text-slate-700 text-right w-24">Total</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -1502,31 +1817,64 @@ export default function MaintenanceSheet({
                             </td>
                           </tr>
                         ) : (
-                          repuestosExp.map((part) => (
-                            <tr key={part.id} className="hover:bg-slate-50/50">
-                              <td className="py-2.5 px-4 text-slate-850 font-medium">{part.nombre}</td>
-                              <td className="py-2.5 px-4 text-center font-mono font-bold text-slate-700">{part.cantidad}</td>
-                              <td className="py-2.5 px-4 text-right font-mono text-slate-650">${part.costoUnitario.toFixed(2)}</td>
-                              <td className="py-2.5 px-4 text-center">
-                                <span className={`inline-block px-2 py-0.5 text-[9px] font-bold rounded ${
-                                  part.surtido ? "bg-emerald-55 text-emerald-800 border border-emerald-100" : "bg-amber-55 text-amber-800 border border-amber-100"
-                                }`}>
-                                  {part.surtido ? "BODEGA OK" : "PENDIENTE"}
-                                </span>
-                              </td>
-                              <td className="py-2.5 px-4 text-right font-mono text-slate-850 font-bold">
-                                ${(part.costoUnitario * part.cantidad).toFixed(2)}
-                              </td>
-                            </tr>
-                          ))
+                          repuestosExp.map((part) => {
+                            const isCli = part.origen === "cliente" || part.repuestoId.startsWith("cli-");
+                            const isExt = part.origen === "externo" || part.repuestoId.startsWith("ext-");
+
+                            return (
+                              <tr key={part.id} className="hover:bg-slate-50/50">
+                                <td className="py-2.5 px-4 text-slate-850 font-medium">
+                                  <div className="font-semibold text-slate-900">{part.nombre}</div>
+                                  {part.notas && (
+                                    <div className="text-[10px] text-slate-500 italic mt-0.5">{part.notas}</div>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-4 text-center">
+                                  {isCli ? (
+                                    <span className="inline-block px-2 py-0.5 bg-purple-100 text-purple-800 text-[9px] font-bold rounded-lg uppercase tracking-wider border border-purple-200">
+                                      👤 Traído x Cliente
+                                    </span>
+                                  ) : isExt ? (
+                                    <span className="inline-block px-2 py-0.5 bg-amber-100 text-amber-800 text-[9px] font-bold rounded-lg uppercase tracking-wider border border-amber-200">
+                                      🛒 Externo
+                                    </span>
+                                  ) : (
+                                    <span className="inline-block px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[9px] font-bold rounded-lg uppercase tracking-wider border border-emerald-200">
+                                      🏢 Bodega CQ
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-4 text-center font-mono font-bold text-slate-700">{part.cantidad}</td>
+                                <td className="py-2.5 px-4 text-right font-mono text-slate-650">
+                                  {isCli ? "$0.00" : `$${part.costoUnitario.toFixed(2)}`}
+                                </td>
+                                <td className="py-2.5 px-4 text-right font-mono text-slate-850 font-bold">
+                                  {isCli ? "$0.00" : `$${(part.costoUnitario * part.cantidad).toFixed(2)}`}
+                                </td>
+                              </tr>
+                            );
+                          })
                         )}
                         <tr className="bg-slate-50/45 font-semibold border-t border-slate-205">
-                          <td colSpan={4} className="py-3 px-4 text-left font-sans text-slate-705">Subtotal de Repuestos e Insumos Entregados</td>
+                          <td colSpan={4} className="py-3 px-4 text-left font-sans text-slate-705">Subtotal de Repuestos e Insumos Facturables</td>
                           <td className="py-3 px-4 text-right font-mono text-slate-900">${totalRepuestosCosto.toFixed(2)}</td>
                         </tr>
                       </tbody>
                     </table>
                   </div>
+
+                  {/* Disclaimer when client or external parts are present */}
+                  {repuestosExp.some(p => p.origen === "cliente" || p.repuestoId.startsWith("cli-")) && (
+                    <div className="p-3 bg-purple-50/60 border border-purple-200/70 rounded-xl text-purple-950 text-[11px] flex items-start space-x-2">
+                      <UserCheck className="h-4 w-4 text-purple-700 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold">Aviso de Garantía sobre Repuestos Provistos por el Cliente:</span>
+                        <p className="text-purple-900 text-[10.5px] mt-0.5">
+                          CQ Motors garantiza la precisión técnica y mano de obra del montaje mecánico. La garantía del repuesto provisto por el cliente corresponde a su proveedor de origen.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Proforma Totals breakdown block */}
@@ -1552,11 +1900,15 @@ export default function MaintenanceSheet({
                   <div className="w-full md:w-80 bg-slate-900 text-white rounded-3xl p-6 flex flex-col justify-between border border-slate-850 shadow-lg shrink-0 space-y-3">
                     <div className="space-y-2 text-xs">
                       <div className="flex justify-between text-slate-400">
-                        <span>Servicios {"&"} Mano de Obra:</span>
+                        <span>Tareas & Checklist:</span>
+                        <span className="font-mono font-medium">${totalTareasCosto.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-400">
+                        <span>Mano de Obra Base:</span>
                         <span className="font-mono font-medium">${costoManoObra.toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between text-slate-400 pb-2 border-b border-slate-800">
-                        <span>Insumos {"&"} Repuestos:</span>
+                        <span>Insumos & Repuestos:</span>
                         <span className="font-mono font-medium">${totalRepuestosCosto.toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between text-slate-300 font-semibold pt-1">
@@ -1592,6 +1944,70 @@ export default function MaintenanceSheet({
                     <span className="font-bold text-slate-700 block">CLIENTE CONFORME</span>
                     <span className="text-[10px] font-mono">Aceptación de Presupuesto y Entrega</span>
                   </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* CONFIRM DELETE MAINTENANCE / PATIO RECORD MODAL */}
+      <AnimatePresence>
+        {showDeleteConfirmModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 font-sans"
+            >
+              <div className="p-6 space-y-4">
+                <div className="flex items-center space-x-3">
+                  <div className="p-3 bg-rose-100 text-rose-600 rounded-xl">
+                    <Trash2 className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 font-display">
+                      Eliminar Hoja de Patio
+                    </h3>
+                    <p className="text-xs text-slate-500 font-mono">
+                      Vehículo: {vehicle.placa} ({vehicle.marca} {vehicle.modelo})
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-3.5 bg-rose-50 border border-rose-100 rounded-xl text-xs text-rose-900 leading-relaxed">
+                  ¿Está seguro de eliminar esta hoja de control de patio y ficha técnica? Se borrará el vehículo de la lista, su reporte técnico y todas las tareas asociadas.
+                </div>
+
+                <div className="flex items-center justify-end space-x-3 pt-2">
+                  <button
+                    type="button"
+                    disabled={isDeletingVehicle}
+                    onClick={() => setShowDeleteConfirmModal(false)}
+                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isDeletingVehicle}
+                    onClick={async () => {
+                      if (!onDeleteVehicle) return;
+                      setIsDeletingVehicle(true);
+                      try {
+                        await onDeleteVehicle(vehicle.id);
+                        setShowDeleteConfirmModal(false);
+                        onGoBack();
+                      } finally {
+                        setIsDeletingVehicle(false);
+                      }
+                    }}
+                    className="px-5 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition-colors flex items-center space-x-1.5 shadow-sm cursor-pointer"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>{isDeletingVehicle ? "Eliminando..." : "Sí, Eliminar Registro"}</span>
+                  </button>
                 </div>
               </div>
             </motion.div>

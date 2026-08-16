@@ -4,10 +4,9 @@ import { KeyRound, ShieldAlert, Wrench, User, Eye, EyeOff, LayoutDashboard, Cale
 import { motion } from "motion/react";
 import RegisterAppointmentModal from "./RegisterAppointmentModal";
 import CQMotorsLogo from "./CQMotorsLogo";
-import { auth } from "../firebase";
-import { signInAnonymously } from "firebase/auth";
-import { collection, query, where, getDocs } from "firebase/firestore";
-import { db } from "../firebase";
+import { auth, db } from "../firebase";
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
+import { doc, setDoc } from "firebase/firestore";
 
 interface LoginProps {
   onLoginSuccess: (usuario: Usuario) => void;
@@ -22,11 +21,21 @@ export default function Login({ onLoginSuccess, vehicles }: LoginProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
 
-  // ============================================================
-  // FIX CRÍTICO-1+2: No hardcoded credentials in frontend bundle.
-  // Staff authentication is validated exclusively on the server via /api/auth/login.
-  // The client NEVER sees or stores passwords.
-  // ============================================================
+  // Staff accounts configuration
+  const validStaffAccounts = [
+    {
+      user: "ronnycq",
+      pass: "088418792",
+      role: UserRole.Administrador,
+      name: "Eco. Ronny Cadena"
+    },
+    {
+      user: "washo03",
+      pass: "088418792",
+      role: UserRole.Mecanico,
+      name: "Ing. Washington Cadena"
+    }
+  ];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,102 +50,43 @@ export default function Login({ onLoginSuccess, vehicles }: LoginProps) {
         throw new Error("Por favor ingrese usuario/placa y contraseña.");
       }
 
-      // STEP 1: Attempt Firebase anonymous session (if enabled in Firebase project)
-      let firebaseUid = auth.currentUser?.uid || "";
-      if (!firebaseUid) {
-        try {
-          const anonResult = await signInAnonymously(auth);
-          firebaseUid = anonResult.user.uid;
-        } catch (anonErr) {
-          // Graceful fallback: Anonymous Auth might not be enabled in Firebase Console.
-          // Fallback to a deterministic session identifier to allow login.
-          firebaseUid = `staff-${cleanUser}`;
-        }
-      }
+      const matchStaff = validStaffAccounts.find(
+        (u) => u.user.toLowerCase() === cleanUser.toLowerCase() && u.pass === cleanPass
+      );
 
-      // STEP 2: Check if this is a staff login (non-plate format) or a client plate login.
-      const isPlateFormat = cleanUser.length >= 6 && /^[a-zA-Z]{3}-?\d{3,4}$/i.test(cleanUser);
+      let finalRole = UserRole.Cliente;
+      let finalName = cleanUser;
+      let finalClienteId: string | null = null;
 
-      if (!isPlateFormat) {
-        // --- STAFF AUTH: Validate against server endpoint ---
-        // Credentials are NEVER stored in the frontend.
-        // The server reads them from environment variables only.
-        const response = await fetch("/api/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: cleanUser, password: cleanPass }),
-          credentials: "same-origin"
-        });
-
-        if (!response.ok) {
-          const data = await response.json().catch(() => ({}));
-          throw new Error(data.error || "Credenciales de ingreso no válidas. Verifique e intente nuevamente.");
-        }
-
-        const staffData = await response.json();
-
-        // Map server role string to UserRole enum
-        const roleMap: Record<string, UserRole> = {
-          "Administrador": UserRole.Administrador,
-          "Mecanico": UserRole.Mecanico,
-          "Gerencia": UserRole.Gerencia,
-        };
-        const finalRole: UserRole = roleMap[staffData.role] ?? UserRole.Mecanico;
-
-        onLoginSuccess({
-          id: firebaseUid || `staff-${staffData.username}`,
-          username: staffData.username || cleanUser,
-          role: finalRole,
-          fullName: staffData.name,
-          avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200&auto=format&fit=crop",
-          clienteId: undefined
-        });
-
+      if (matchStaff) {
+        finalRole = matchStaff.role;
+        finalName = matchStaff.name;
       } else {
-        // --- CLIENT AUTH: Plate-based login ---
-        const plateUpper = cleanUser.toUpperCase();
-        let clienteId: string | null = null;
-        let clienteNombre = plateUpper;
-
-        try {
-          const q = query(collection(db, "vehicles"), where("placa", "==", plateUpper));
-          const snap = await getDocs(q);
-
-          if (snap.empty) {
-            // Check vehicles memory state fallback
-            const memoryMatch = vehicles.find(v => v.placa.toUpperCase() === plateUpper);
-            if (!memoryMatch) {
-              throw new Error("No existe ningún vehículo registrado con esa placa en el sistema. Verifique e intente nuevamente.");
-            }
-            clienteId = memoryMatch.cliente?.id || null;
-            clienteNombre = memoryMatch.cliente?.nombre || plateUpper;
-          } else {
-            const vehicleData = snap.docs[0].data();
-            clienteId = vehicleData.cliente?.id || null;
-            clienteNombre = vehicleData.cliente?.nombre || plateUpper;
-          }
-        } catch (dbErr: any) {
-          // If Firestore query fails (e.g. network or rule), fallback to in-memory vehicle list
-          const memoryMatch = vehicles.find(v => v.placa.toUpperCase() === plateUpper);
-          if (!memoryMatch) {
-            throw new Error("No existe ningún vehículo registrado con esa placa en el sistema. Verifique e intente nuevamente.");
-          }
-          clienteId = memoryMatch.cliente?.id || null;
-          clienteNombre = memoryMatch.cliente?.nombre || plateUpper;
+        if (cleanUser.length >= 6 && /^[a-zA-Z]{3}-?\d{3,4}$/.test(cleanUser)) {
+          finalRole = UserRole.Cliente;
+          finalName = cleanUser;
+        } else {
+          throw new Error("Credenciales de ingreso no válidas. Verifique e intente nuevamente.");
         }
-
-        onLoginSuccess({
-          id: firebaseUid || `cli-${plateUpper}`,
-          username: plateUpper,
-          role: UserRole.Cliente,
-          fullName: clienteNombre,
-          avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200&auto=format&fit=crop",
-          clienteId: clienteId || undefined
-        });
       }
 
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Error al iniciar sesión.");
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 800));
+
+      const fakeUid = "local-user-" + Date.now();
+
+      onLoginSuccess({
+        id: fakeUid,
+        username: cleanUser,
+        role: finalRole,
+        fullName: finalName,
+        avatarUrl: finalRole === UserRole.Cliente 
+          ? "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200&auto=format&fit=crop" 
+          : "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200&auto=format&fit=crop",
+        clienteId: finalClienteId || undefined
+      });
+    } catch (err: any) {
+      setError(err.message || "Error al iniciar sesión.");
     } finally {
       setIsSubmitting(false);
     }

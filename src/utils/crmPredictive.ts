@@ -19,22 +19,6 @@ export interface PredictiveAnalysis {
   drivingProfileDesc: string;
 }
 
-// FIX CODE-1: Extract magic numbers into named constants.
-// Previously, `5000` was hardcoded in 3 different places with no documentation.
-// This makes the interval configurable and self-documenting.
-
-/** Standard preventive maintenance interval in kilometers. */
-const SERVICE_INTERVAL_KM = 5000;
-
-/** Maximum calendar days between oil changes for regular use vehicles. */
-const MAX_SERVICE_DAYS_REGULAR = 180; // 6 months
-
-/** Maximum calendar days between oil changes for work/fleet use vehicles. */
-const MAX_SERVICE_DAYS_TRABAJO = 90; // 3 months
-
-/** Upper bound guard for estimated current km to prevent astronomical values from bad dates. */
-const MAX_REASONABLE_KM = 1_500_000; // 1.5M km is the highest reliable odometer reading ever recorded
-
 /**
  * PATH CLEAN helper to prevent normalization issues when mapping names.
  */
@@ -47,7 +31,7 @@ function cleanText(text: string): string {
  * Incorporates:
  * 1. Odometer progression based on typical regional averages.
  * 2. Multi-point calendar history regression if multiple maintenances are present.
- * 3. SERVICE_INTERVAL_KM OR calendar dual-trigger rule.
+ * 3. 5,000 Km OR 6-Month (180 days) dual-trigger rule.
  * 4. Prediction confidence grading.
  * 5. Dynamic list of targeted machine checkpoints.
  */
@@ -106,10 +90,9 @@ export function calculatePredictiveCRM(
       (1000 * 60 * 60 * 24)
     ));
     
-    // FIX CODE-1: Use SERVICE_INTERVAL_KM constant instead of hardcoded 5000.
-    // In automotive practice, preventative services occur approximately every SERVICE_INTERVAL_KM.
-    // We interpolate the distance spanned by the frequency of servicing.
-    const approximateSpannedKm = SERVICE_INTERVAL_KM * (sortedHistory.length - 1);
+    // In automotive practice, preventative services occur approximately every 5,000 Km.
+    // Therefore, we can interpolate the distance spanned by the frequency of servicing.
+    const approximateSpannedKm = 5000 * (sortedHistory.length - 1);
     
     if (daysDelta > 15) {
       if (isTrabajo) {
@@ -134,12 +117,11 @@ export function calculatePredictiveCRM(
     
     if (daysDelta > 10) {
       if (isTrabajo) {
-        // FIX CODE-1: Use SERVICE_INTERVAL_KM instead of hardcoded 5000
-        kmPerDay = Math.min(300, Math.max(50, SERVICE_INTERVAL_KM / daysDelta));
+        kmPerDay = Math.min(300, Math.max(50, 5000 / daysDelta));
         confidence = "Media-Ajustada";
         drivingProfileDesc = "Extrapolación inicial de uso comercial (Ficha Única)";
       } else {
-        kmPerDay = Math.min(150, Math.max(10, SERVICE_INTERVAL_KM / daysDelta));
+        kmPerDay = Math.min(150, Math.max(10, 5000 / daysDelta));
         confidence = "Media-Ajustada";
         drivingProfileDesc = "Extrapolación de intervalo inicial (Ficha de patio única)";
       }
@@ -160,24 +142,17 @@ export function calculatePredictiveCRM(
     (now.getTime() - dateIngreso.getTime()) / (1000 * 60 * 60 * 24)
   ));
 
-  // FIX CODE-2: Guard against malformed fechaIngreso (e.g. epoch 1970, far future date).
-  // Without this, daysSinceIngreso can be a huge number producing an absurd km estimate.
-  // Max realistic days since ingreso is bounded to 30 years of driving.
-  const MAX_DAYS_INGRESO = 365 * 30;
-  const safeDaysSinceIngreso = Math.min(daysSinceIngreso, MAX_DAYS_INGRESO);
+  // Current predicted mileage on vehicle
+  const estimatedCurrentKm = Math.round(vehicle.kilometraje + (daysSinceIngreso * kmPerDay));
 
-  // Current predicted mileage on vehicle — capped at MAX_REASONABLE_KM
-  const estimatedCurrentKm = Math.min(
-    MAX_REASONABLE_KM,
-    Math.round(vehicle.kilometraje + (safeDaysSinceIngreso * kmPerDay))
-  );
-
-  // 3. DUAL-TRIGGER ESTIMATOR using named constants instead of magic numbers
-  const mileageRemainingKm = Math.max(0, SERVICE_INTERVAL_KM - (daysSinceLastService * kmPerDay));
+  // 3. DUAL-TRIGGER ESTIMATOR (5,000 KM OR 180 DAYS / 6 MONTHS for Particular, 90 DAYS / 3 MONTHS for Trabajo)
+  // Distance remaining to reach next 5,000 Km milestone
+  const currentIntervalMilestone = 5000;
+  const mileageRemainingKm = Math.max(0, currentIntervalMilestone - (daysSinceLastService * kmPerDay));
   const mileageDaysRemaining = Math.max(0, mileageRemainingKm / kmPerDay);
 
-  // FIX CODE-1: Use named constants for calendar limits
-  const maxAllowedServiceDays = isTrabajo ? MAX_SERVICE_DAYS_TRABAJO : MAX_SERVICE_DAYS_REGULAR;
+  // Calendar time remaining to hit limits (Trabajo has tighter 90 days limit due to intense work usage)
+  const maxAllowedServiceDays = isTrabajo ? 90 : 180;
   const timeRemainingDays = maxAllowedServiceDays - daysSinceLastService;
 
   // Let's decide which threshold triggers the service recommendation first

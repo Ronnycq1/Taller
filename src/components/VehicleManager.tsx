@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { Vehiculo, Cliente, UserRole } from "../types";
-import { validateVehicleInput, sanitizeInput } from "../utils/security";
 import CQMotorsLogo from "./CQMotorsLogo";
 import { 
   Car, 
@@ -59,6 +58,8 @@ export default function VehicleManager({
   const [tipoUso, setTipoUso] = useState<"Particular" | "Trabajo">("Particular");
   const [filterTipoUso, setFilterTipoUso] = useState<"All" | "Particular" | "Trabajo">("All");
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [vehicleToDelete, setVehicleToDelete] = useState<Vehiculo | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // 360° DAMAGE INSPECTION APPLET STATES (6th of 8 improvements)
   const [damages, setDamages] = useState<Record<string, boolean>>({
@@ -106,23 +107,23 @@ export default function VehicleManager({
 
     const newCliente: Cliente = {
       id: `cli-${Date.now()}`,
-      nombre: sanitizeInput(nombreCliente, 100),
-      telefono: sanitizeInput(telefonoCliente, 20),
-      correo: sanitizeInput(correoCliente || `${nombreCliente.toLowerCase().replace(/\s+/g, '')}@example.com`, 100)
+      nombre: nombreCliente,
+      telefono: telefonoCliente,
+      correo: correoCliente || `${nombreCliente.toLowerCase().replace(/\s+/g, '')}@example.com`
     };
 
     const newVehiculo: Vehiculo = {
       id: `veh-${Date.now()}`,
-      placa: sanitizeInput(placa.toUpperCase().trim(), 10),
-      marca: sanitizeInput(marca, 50),
-      modelo: sanitizeInput(modelo, 50),
-      anio: Math.max(1900, Math.min(2100, Number(anio))),
+      placa: placa.toUpperCase().trim(),
+      marca: marca,
+      modelo: modelo,
+      anio: Number(anio),
       cliente: newCliente,
       fechaIngreso: new Date().toISOString(),
       estado: "Ingresado",
-      kilometraje: Math.max(0, Number(kilometraje || 0)),
+      kilometraje: Number(kilometraje || 0),
       tipoUso: tipoUso,
-      nivelCombustible: Math.max(0, Math.min(100, Number(gasLevel))),
+      nivelCombustible: Number(gasLevel),
       inspeccionDanos: {
         frontal: damages.capo || damages.parachoquesDel ? "Abolladura / Golpe Delantero" : "Sin Daño",
         posterior: damages.maletero ? "Golpe en capota trasera" : "Sin Daño",
@@ -132,12 +133,6 @@ export default function VehicleManager({
         parabrisas: damages.parabrisas || damages.retrovisores ? "Trizadura o retrovisor afectado" : "Sin Daño"
       }
     };
-
-    const validation = validateVehicleInput(newVehiculo);
-    if (!validation.valid) {
-      alert(`Error de validación de seguridad: ${validation.errors.join(", ")}`);
-      return;
-    }
 
     onRegisterVehicle(newVehiculo);
     setJustRegisteredVehicle(newVehiculo);
@@ -726,11 +721,9 @@ export default function VehicleManager({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (confirm(`¿Está seguro de eliminar la hoja de control de patio para el vehículo con placa ${v.placa} (${v.marca} ${v.modelo})? Esta acción borrará la ficha, historial y no se puede deshacer.`)) {
-                            onDeleteVehicle(v.id);
-                          }
+                          setVehicleToDelete(v);
                         }}
-                        className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-200"
+                        className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-200 cursor-pointer"
                         title="Eliminar hoja de control de patio"
                       >
                         <Trash2 className="h-4 w-4 shrink-0" />
@@ -917,6 +910,69 @@ export default function VehicleManager({
                 </button>
               </div>
 
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* CONFIRM DELETE VEHICLE / PATIO RECORD MODAL */}
+      <AnimatePresence>
+        {vehicleToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200"
+            >
+              <div className="p-6 space-y-4">
+                <div className="flex items-center space-x-3">
+                  <div className="p-3 bg-rose-100 text-rose-600 rounded-xl">
+                    <Trash2 className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 font-display">
+                      Eliminar Ficha de Patio
+                    </h3>
+                    <p className="text-xs text-slate-500 font-mono">
+                      Placa: {vehicleToDelete.placa} ({vehicleToDelete.marca} {vehicleToDelete.modelo})
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-3.5 bg-rose-50 border border-rose-100 rounded-xl text-xs text-rose-900 leading-relaxed">
+                  ¿Está seguro de eliminar esta hoja de control de patio? Se borrará la ficha del vehículo, su historial de mantenimiento y registros de inspección.
+                </div>
+
+                <div className="flex items-center justify-end space-x-3 pt-2">
+                  <button
+                    type="button"
+                    disabled={isDeleting}
+                    onClick={() => setVehicleToDelete(null)}
+                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isDeleting}
+                    onClick={async () => {
+                      if (!onDeleteVehicle) return;
+                      setIsDeleting(true);
+                      try {
+                        await onDeleteVehicle(vehicleToDelete.id);
+                        setVehicleToDelete(null);
+                      } finally {
+                        setIsDeleting(false);
+                      }
+                    }}
+                    className="px-5 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition-colors flex items-center space-x-1.5 shadow-sm cursor-pointer"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>{isDeleting ? "Eliminando..." : "Sí, Eliminar Ficha"}</span>
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </div>
         )}

@@ -179,7 +179,7 @@ export default function DashboardMetrics({
               <span>Analítica BI de Taller</span>
             </span>
             <h3 className="font-display font-black text-slate-900 text-lg">
-              Rendimiento Operativo {"&"} Rotación de Repuestos
+              Rendimiento Operativo & Rotación de Repuestos
             </h3>
           </div>
           <p className="text-xs text-slate-500 mt-1">
