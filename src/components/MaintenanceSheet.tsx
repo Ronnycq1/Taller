@@ -519,7 +519,7 @@ export default function MaintenanceSheet({
               <History className="h-5 w-5 shrink-0" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-100 text-base tracking-tight">Expediente & Bitácora Automotriz</h3>
+              <h3 className="font-bold text-slate-100 text-base tracking-tight">Expediente {"&"} Bitácora Automotriz</h3>
               <p className="text-xs text-slate-400">Historial técnico multipuntos y registros cronológicos de servicio</p>
             </div>
           </div>
@@ -1552,11 +1552,11 @@ export default function MaintenanceSheet({
                   <div className="w-full md:w-80 bg-slate-900 text-white rounded-3xl p-6 flex flex-col justify-between border border-slate-850 shadow-lg shrink-0 space-y-3">
                     <div className="space-y-2 text-xs">
                       <div className="flex justify-between text-slate-400">
-                        <span>Servicios & Mano de Obra:</span>
+                        <span>Servicios {"&"} Mano de Obra:</span>
                         <span className="font-mono font-medium">${costoManoObra.toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between text-slate-400 pb-2 border-b border-slate-800">
-                        <span>Insumos & Repuestos:</span>
+                        <span>Insumos {"&"} Repuestos:</span>
                         <span className="font-mono font-medium">${totalRepuestosCosto.toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between text-slate-300 font-semibold pt-1">

@@ -665,7 +665,7 @@ export default function PublicVehicleHistory({
                 <div className="space-y-1">
                   <span className="text-[9.5px] uppercase font-mono font-black tracking-widest text-rose-400 flex items-center gap-1">
                     <Star className="h-3.5 w-3.5 text-rose-400 fill-rose-500" />
-                    <span>Control de Calidad CQ Motors &bull; Tu opinión importa</span>
+                    <span>Control de Calidad CQ Motors {"•"} Tu opinión importa</span>
                   </span>
                   <h3 className="font-display font-black text-slate-100 text-base">
                     ¿Te acabamos de entregar tu auto o está listo para retiro?
@@ -695,7 +695,7 @@ export default function PublicVehicleHistory({
                   </div>
 
                   <div className="space-y-2">
-                    <label className="font-bold text-slate-350 block">Atención & Hospitalidad:</label>
+                    <label className="font-bold text-slate-350 block">Atención {"&"} Hospitalidad:</label>
                     <div className="flex items-center space-x-1.5 bg-slate-950/50 p-2 rounded-xl border border-slate-800">
                       {[1, 2, 3, 4, 5].map(idx => (
                         <button
@@ -1036,9 +1036,9 @@ export default function PublicVehicleHistory({
       {/* FOOTER BAR */}
       <footer className="bg-white border-t border-slate-200/80 py-6 text-center text-xs text-slate-400 font-sans mt-12 no-print">
         <div className="max-w-4xl mx-auto px-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
-          <span>CQ Motors S.A. &bull; Sistema de Gestión de Mantenimiento Vehicular (PWA) &copy; 2026</span>
+          <span>CQ Motors S.A. {"•"} Sistema de Gestión de Mantenimiento Vehicular (PWA) {"©"} 2026</span>
           <span className="font-mono text-[9.5px]">
-            Efectuando consulta pública segura QR &bull; Power BI Ready
+            Efectuando consulta pública segura QR {"•"} Power BI Ready
           </span>
         </div>
       </footer>

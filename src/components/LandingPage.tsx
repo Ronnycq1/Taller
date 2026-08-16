@@ -327,7 +327,7 @@ export default function LandingPage({
               <div className="absolute inset-0 bg-gradient-to-t from-white/10 via-transparent to-transparent z-10"></div>
               
               <img 
-                src="https://images.unsplash.com/photo-1617814076367-b759c7d7e738?q=80&w=1400&auto=format&fit=crop" 
+                src={"https://images.unsplash.com/photo-1617814076367-b759c7d7e738?q=80&w=1400&auto=format&fit=crop"} 
                 alt="Taller de Diagnóstico de Precisión" 
                 className="w-full h-[320px] sm:h-[480px] object-cover rounded-[22px] filter brightness-[0.95] group-hover:scale-[1.01] transition-all duration-1000"
               />
@@ -594,7 +594,7 @@ export default function LandingPage({
                         </div>
 
                         <div className="flex justify-between items-center text-xs">
-                          <span className="text-[#6e6e73]">Filtros & Bujías:</span>
+                          <span className="text-[#6e6e73]">Filtros {"&"} Bujías:</span>
                           <span className="text-amber-600 font-semibold font-mono">Próxima Alerta</span>
                         </div>
                       </div>
@@ -828,7 +828,7 @@ export default function LandingPage({
             <div className="relative group">
               <div className="absolute inset-0 bg-[#0066cc] rounded-3xl blur-2xl opacity-10 group-hover:opacity-20 transition-all duration-700"></div>
               <img 
-                src="https://images.unsplash.com/photo-1487754180451-c456f719a1fc?q=80&w=1200&auto=format&fit=crop" 
+                src={"https://images.unsplash.com/photo-1487754180451-c456f719a1fc?q=80&w=1200&auto=format&fit=crop"} 
                 alt="Infraestructura del Taller Automotriz" 
                 className="relative rounded-3xl shadow-2xl object-cover h-[400px] w-full"
               />
@@ -967,7 +967,7 @@ export default function LandingPage({
 
           {/* Col 4 */}
           <div className="space-y-2">
-            <h4 className="text-[#1d1d1f] font-semibold text-[11px] uppercase tracking-wider">Legalidad & Enlaces</h4>
+            <h4 className="text-[#1d1d1f] font-semibold text-[11px] uppercase tracking-wider">Legalidad {"&"} Enlaces</h4>
             <ul className="space-y-1.5 flex flex-col items-start text-xs">
               <li>
                 <button 
@@ -1238,7 +1238,7 @@ export default function LandingPage({
                     Garantizamos que <strong>no vendemos, comercializamos ni transferimos</strong> tus datos personales a terceras partes con fines publicitarios. Para la correcta operatividad técnica, compartimos información exclusivamente con:
                   </p>
                   <ul className="list-disc pl-5 space-y-1.5 text-[#6e6e73]">
-                    <li><strong>Google (AI Studio & API):</strong> Los textos de consulta y prompts técnicos se transmiten de forma cifrada a través de la API oficial de Google para generar diagnósticos enriquecidos, operando bajo las políticas globales de seguridad de Google.</li>
+                    <li><strong>Google (AI Studio {"&"} API):</strong> Los textos de consulta y prompts técnicos se transmiten de forma cifrada a través de la API oficial de Google para generar diagnósticos enriquecidos, operando bajo las políticas globales de seguridad de Google.</li>
                     <li><strong>Firebase (Google Cloud Platform):</strong> Proveedor de infraestructura crítica que almacena de forma segura la base de datos de bitácoras, fotos del taller, información de clientes y credenciales cifradas con los máximos niveles de seguridad de la industria.</li>
                   </ul>
                 </section>

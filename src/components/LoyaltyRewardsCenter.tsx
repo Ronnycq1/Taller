@@ -459,7 +459,7 @@ export default function LoyaltyRewardsCenter({
               <Award className="h-5 w-5" />
             </div>
             <span className="text-xs uppercase font-extrabold tracking-widest text-indigo-400 font-mono flex items-center gap-1.5">
-              <span>Club de Recompensas y Calidad &bull; CQ Motors</span>
+              <span>Club de Recompensas y Calidad {"•"} CQ Motors</span>
               <Sparkles className="h-3 w-3 text-amber-400" />
             </span>
           </div>
@@ -1163,7 +1163,7 @@ export default function LoyaltyRewardsCenter({
 
               {/* Question 2: Service attention */}
               <div className="space-y-2">
-                <label className="font-bold text-slate-700 block">2. Hospitalidad & Atención al Cliente:</label>
+                <label className="font-bold text-slate-700 block">2. Hospitalidad {"&"} Atención al Cliente:</label>
                 <div className="flex items-center space-x-2.5 bg-slate-50 p-3 rounded-2xl border border-slate-150">
                   {[1, 2, 3, 4, 5].map(idx => (
                     <button
@@ -1271,7 +1271,7 @@ export default function LoyaltyRewardsCenter({
 
             <div className="space-y-1">
               <h3 className="font-display font-black text-slate-900 text-lg">¡Canje Autorizado!</h3>
-              <p className="text-xs text-slate-400">CQ Motors S.A. &bull; Club de Fidelidad VIP</p>
+              <p className="text-xs text-slate-400">CQ Motors S.A. {"•"} Club de Fidelidad VIP</p>
             </div>
 
             {/* Simulated Printed Voucher ticket */}

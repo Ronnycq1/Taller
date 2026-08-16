@@ -1,0 +1,14 @@
+{
+  "0": "App.tsx",
+  "1": "types.ts",
+  "2": "dependencies",
+  "3": "compilerOptions",
+  "4": "devDependencies",
+  "5": "uiSlice.ts",
+  "6": "LoyaltyRewardsCenter.tsx",
+  "7": "2. The \"Dirty Dozen\" Payloads (Threat Vector Analysis)",
+  "8": "MaintenanceSheet.tsx",
+  "9": "etl_firestore_to_sql.py",
+  "10": "server.ts",
+  "11": "vite.config.ts"
+}

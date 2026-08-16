@@ -539,7 +539,7 @@ export default function DashboardOverview({
                 <span>Módulo Inteligente</span>
               </span>
               <h3 className="font-display font-black text-slate-900 text-lg">
-                Fidelización & Monitoreo CRM Colectivo
+                Fidelización {"&"} Monitoreo CRM Colectivo
               </h3>
             </div>
             <p className="text-xs text-slate-500 mt-1">

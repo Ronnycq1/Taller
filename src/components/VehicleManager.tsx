@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Vehiculo, Cliente, UserRole } from "../types";
+import { validateVehicleInput, sanitizeInput } from "../utils/security";
 import CQMotorsLogo from "./CQMotorsLogo";
 import { 
   Car, 
@@ -105,23 +106,23 @@ export default function VehicleManager({
 
     const newCliente: Cliente = {
       id: `cli-${Date.now()}`,
-      nombre: nombreCliente,
-      telefono: telefonoCliente,
-      correo: correoCliente || `${nombreCliente.toLowerCase().replace(/\s+/g, '')}@example.com`
+      nombre: sanitizeInput(nombreCliente, 100),
+      telefono: sanitizeInput(telefonoCliente, 20),
+      correo: sanitizeInput(correoCliente || `${nombreCliente.toLowerCase().replace(/\s+/g, '')}@example.com`, 100)
     };
 
     const newVehiculo: Vehiculo = {
       id: `veh-${Date.now()}`,
-      placa: placa.toUpperCase().trim(),
-      marca: marca,
-      modelo: modelo,
-      anio: Number(anio),
+      placa: sanitizeInput(placa.toUpperCase().trim(), 10),
+      marca: sanitizeInput(marca, 50),
+      modelo: sanitizeInput(modelo, 50),
+      anio: Math.max(1900, Math.min(2100, Number(anio))),
       cliente: newCliente,
       fechaIngreso: new Date().toISOString(),
       estado: "Ingresado",
-      kilometraje: Number(kilometraje || 0),
+      kilometraje: Math.max(0, Number(kilometraje || 0)),
       tipoUso: tipoUso,
-      nivelCombustible: Number(gasLevel),
+      nivelCombustible: Math.max(0, Math.min(100, Number(gasLevel))),
       inspeccionDanos: {
         frontal: damages.capo || damages.parachoquesDel ? "Abolladura / Golpe Delantero" : "Sin Daño",
         posterior: damages.maletero ? "Golpe en capota trasera" : "Sin Daño",
@@ -131,6 +132,12 @@ export default function VehicleManager({
         parabrisas: damages.parabrisas || damages.retrovisores ? "Trizadura o retrovisor afectado" : "Sin Daño"
       }
     };
+
+    const validation = validateVehicleInput(newVehiculo);
+    if (!validation.valid) {
+      alert(`Error de validación de seguridad: ${validation.errors.join(", ")}`);
+      return;
+    }
 
     onRegisterVehicle(newVehiculo);
     setJustRegisteredVehicle(newVehiculo);

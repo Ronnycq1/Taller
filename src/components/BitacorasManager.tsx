@@ -101,7 +101,7 @@ export default function BitacorasManager({
               <BookOpen className="h-5 w-5" />
             </div>
             <span className="text-xs uppercase font-extrabold tracking-widest text-emerald-400 font-mono">
-              Expediente Digital Perpetuo & CRM Predictivo
+              Expediente Digital Perpetuo {"&"} CRM Predictivo
             </span>
           </div>
           <h2 className="font-display font-extrabold text-2xl sm:text-3xl text-slate-100 tracking-tight">
@@ -323,7 +323,7 @@ export default function BitacorasManager({
                         </span>
                       </div>
                       <div>
-                        <span className="text-slate-450 block text-[9px] uppercase font-semibold">Próximo Filtro & Aceite</span>
+                        <span className="text-slate-450 block text-[9px] uppercase font-semibold">Próximo Filtro {"&"} Aceite</span>
                         <span className="font-sans font-bold text-slate-800 flex items-center space-x-1 mt-0.5">
                           <Calendar className={`h-3 w-3 inline ${crmPred.alertState === "urgent" ? "text-rose-600 animate-bounce" : "text-emerald-650"}`} />
                           <span className={crmPred.alertState === "urgent" ? "text-rose-700 font-black" : ""}>
@@ -530,7 +530,7 @@ export default function BitacorasManager({
                   <div className="w-full text-center text-[8px] text-slate-450 border-t pt-3 border-dashed border-slate-200">
                     Pegar en el margen superior del parabrisas del auto.
                     <br />
-                    <span>Soporte CQ Motors &bull; Historial Médico QR</span>
+                    <span>Soporte CQ Motors {"•"} Historial Médico QR</span>
                   </div>
                 </div>
 

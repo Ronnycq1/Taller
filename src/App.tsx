@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, Suspense, lazy } from "react";
 import { UserRole, Usuario, Vehiculo, Mantenimiento, RepuestoInventario, ActividadReciente, CitaMantenimiento, EncuestaSatisfaccion, CanjePremio } from "./types";
 import { 
   INITIAL_VEHICLES, 
@@ -9,19 +9,58 @@ import {
 import { db, auth, handleFirestoreError, OperationType } from "./firebase";
 import { signInAnonymously } from "firebase/auth";
 import { collection, doc, setDoc, getDoc, getDocs, updateDoc, onSnapshot, deleteDoc, query, where, limit } from "firebase/firestore";
-import Login from "./components/Login";
-import DashboardOverview from "./components/DashboardOverview";
-import VehicleManager from "./components/VehicleManager";
-import MaintenanceSheet from "./components/MaintenanceSheet";
-import InventoryManager from "./components/InventoryManager";
-import ArchitectureGuide from "./components/ArchitectureGuide";
-import AppointmentsManager from "./components/AppointmentsManager";
-import BitacorasManager from "./components/BitacorasManager";
 import CQMotorsLogo from "./components/CQMotorsLogo";
-import PublicVehicleHistory from "./components/PublicVehicleHistory";
-import LoyaltyRewardsCenter from "./components/LoyaltyRewardsCenter";
-import BalancedScorecard from "./components/BalancedScorecard";
-import LandingPage from "./components/LandingPage";
+
+// Lazy-loaded modules (Code Splitting for high performance initial load)
+const Login = lazy(() => import("./components/Login"));
+const DashboardOverview = lazy(() => import("./components/DashboardOverview"));
+const VehicleManager = lazy(() => import("./components/VehicleManager"));
+const MaintenanceSheet = lazy(() => import("./components/MaintenanceSheet"));
+const InventoryManager = lazy(() => import("./components/InventoryManager"));
+const ArchitectureGuide = lazy(() => import("./components/ArchitectureGuide"));
+const AppointmentsManager = lazy(() => import("./components/AppointmentsManager"));
+const BitacorasManager = lazy(() => import("./components/BitacorasManager"));
+const PublicVehicleHistory = lazy(() => import("./components/PublicVehicleHistory"));
+const LoyaltyRewardsCenter = lazy(() => import("./components/LoyaltyRewardsCenter"));
+const BalancedScorecard = lazy(() => import("./components/BalancedScorecard"));
+const LandingPage = lazy(() => import("./components/LandingPage"));
+
+// FIX CODE-4: DEMO_APPOINTMENTS moved to module level — it was being
+// re-declared (creating a new array reference) on every render of AppContent.
+const DEMO_APPOINTMENTS: CitaMantenimiento[] = [];
+
+
+// FIX PERF-3: LiveClock extracted to isolated component.
+// The previous implementation lived inside AppContent and called setTimeStr()
+// every second, triggering a full re-render of the entire component tree.
+// Now, only this tiny component re-renders every second.
+function LiveClock() {
+  const [timeStr, setTimeStr] = React.useState(() =>
+    new Date().toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+  );
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setTimeStr(new Date().toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+  return <span>{timeStr}</span>;
+}
+
+// Premium fallback loader for smooth module loading
+function PageLoadingFallback() {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4 p-8">
+      <div className="relative flex h-12 w-12 items-center justify-center">
+        <div className="absolute h-12 w-12 animate-ping rounded-full bg-emerald-500/20" />
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent" />
+      </div>
+      <span className="font-mono text-xs font-bold uppercase tracking-widest text-slate-400">
+        Cargando módulo de taller...
+      </span>
+    </div>
+  );
+}
 
 import { 
   Wrench, 
@@ -41,7 +80,13 @@ import {
   MessageSquareHeart,
   TrendingUp,
   Sun,
-  Moon
+  Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Menu,
+  X,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { ToastProvider, useToast } from "./components/Toast";
@@ -70,6 +115,26 @@ function AppContent() {
 
   const toggleDarkMode = () => {
     setDarkMode(prev => !prev);
+  };
+
+  // Collapsible vertical sidebar states
+  const [sidebarExpanded, setSidebarExpanded] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("cq_sidebar") !== "collapsed";
+    } catch {
+      return true;
+    }
+  });
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
+
+  const toggleSidebar = () => {
+    setSidebarExpanded(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem("cq_sidebar", next ? "expanded" : "collapsed");
+      } catch {}
+      return next;
+    });
   };
 
   // Offline resilience states
@@ -107,22 +172,21 @@ function AppContent() {
   const [surveys, setSurveys] = useState<EncuestaSatisfaccion[]>([]);
   const [redemptions, setRedemptions] = useState<CanjePremio[]>([]);
 
-  // Clean initial array for appointments
-  const DEMO_APPOINTMENTS: CitaMantenimiento[] = [];
-
   // Auth readiness state for Firestore subscriptions
   const [authReady, setAuthReady] = useState<boolean>(true);
 
-  // Manage session persistence on mount using localStorage and ensure Firebase Auth
+  // FIX M1: Session persistence using sessionStorage instead of localStorage.
+  // sessionStorage expires on tab close, reducing the XSS session hijacking window.
   useEffect(() => {
-    const savedSession = localStorage.getItem("cqmotors_session");
+    const savedSession = sessionStorage.getItem("cqmotors_session");
     if (savedSession) {
       try {
         const uData = JSON.parse(savedSession);
         setUsuario(uData);
-        console.log(`[AUTH SESSION] Restored local session for ${uData.fullName} (${uData.role})`);
-      } catch (err) {
-        console.error("No se pudo restaurar la sesión local:", err);
+        // No PII logged here — only role and name which are non-sensitive operational context
+      } catch {
+        // Silently discard malformed session data
+        sessionStorage.removeItem("cqmotors_session");
       }
     }
 
@@ -130,14 +194,15 @@ function AppContent() {
     if (!auth.currentUser) {
       signInAnonymously(auth).then(() => {
         setAuthReady(true);
-      }).catch(err => {
-        console.warn("Anonymous auth warning:", err);
+      }).catch(() => {
+        // Silent fail — anonymous auth not critical for basic operation
         setAuthReady(true);
       });
     } else {
       setAuthReady(true);
     }
   }, []);
+
 
   // Automatic background database cleanup of simulated mock records & seed inventory if empty
   useEffect(() => {
@@ -264,15 +329,24 @@ function AppContent() {
     }
   }, [isOnline, offlineQueue]);
 
+  // FIX PERF-1: Memoize clienteId to use as stable primitive dependency in useEffect.
+  // Previously, clientVehicleIdsStr depended on `vehicles`, which is updated by the
+  // Firestore subscription, potentially creating a reactive loop.
+  // Extracting just the clienteId as the dependency breaks the cycle.
+  const clienteId = useMemo(() => {
+    if (!usuario || usuario.role !== UserRole.Cliente) return null;
+    return usuario.clienteId ?? null;
+  }, [usuario]);
+
   const clientVehicleIdsStr = useMemo(() => {
-    if (!usuario || usuario.role !== UserRole.Cliente || !usuario.clienteId) return "";
-    return vehicles.filter(v => v.cliente.id === usuario.clienteId).map(v => v.id).join(",");
-  }, [vehicles, usuario]);
+    if (!clienteId) return "";
+    return vehicles.filter(v => v.cliente.id === clienteId).map(v => v.id).join(",");
+  }, [vehicles, clienteId]);
 
   const clientPlacasStr = useMemo(() => {
-    if (!usuario || usuario.role !== UserRole.Cliente || !usuario.clienteId) return "";
-    return vehicles.filter(v => v.cliente.id === usuario.clienteId).map(v => v.placa).join(",");
-  }, [vehicles, usuario]);
+    if (!clienteId) return "";
+    return vehicles.filter(v => v.cliente.id === clienteId).map(v => v.placa).join(",");
+  }, [vehicles, clienteId]);
 
   // Sync in real-time from Firestore based on authenticated role
   useEffect(() => {
@@ -476,20 +550,12 @@ function AppContent() {
       unsubSurveys();
       unsubRedemptions();
     };
-  }, [authReady, usuario, clientVehicleIdsStr, clientPlacasStr]);
+  // FIX PERF-1: Depend on stable primitives (clienteId) instead of derived strings
+  // that change on every render, which could trigger subscription restarts.
+  }, [authReady, usuario, clienteId]);
 
-  // Live Timer for header
-  const [timeStr, setTimeStr] = useState("");
-
-  useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      setTimeStr(now.toLocaleTimeString("es-EC", { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-    };
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
-    return () => clearInterval(interval);
-  }, []);
+  // FIX PERF-3: LiveClock is now an isolated component above.
+  // This section is intentionally removed to avoid global re-renders every second.
 
   // Parse scanned QR code queries from URL parameters (search & hash)
   useEffect(() => {
@@ -512,9 +578,12 @@ function AppContent() {
         }
       }
 
+      // FIX BAJO-1: Sanitize QR param — enforce max length and safe characters only.
       if (vId && vId.trim()) {
-        console.log("[QR SCANNER] Detected scanned vehicle ID/placa from URL:", vId.trim());
-        setPublicVehicleId(vId.trim());
+        const sanitized = vId.trim().slice(0, 128).replace(/[^a-zA-Z0-9_\-]/g, "");
+        if (sanitized.length > 0) {
+          setPublicVehicleId(sanitized);
+        }
       }
     };
 
@@ -573,7 +642,9 @@ function AppContent() {
   // Safe login callback
   const handleLoginSuccess = (usr: Usuario) => {
     setUsuario(usr);
-    localStorage.setItem("cqmotors_session", JSON.stringify(usr));
+    // FIX M1: Use sessionStorage (expires on tab close) instead of localStorage
+    // to reduce session hijacking attack surface via XSS.
+    sessionStorage.setItem("cqmotors_session", JSON.stringify(usr));
     appendLog("registro", `Sesión iniciada por ${usr.fullName} (${usr.role}).`, usr.fullName);
   };
 
@@ -586,7 +657,8 @@ function AppContent() {
     setUsuario(null);
     setSelectedVehicle(null);
     setActiveTab("dashboard");
-    localStorage.removeItem("cqmotors_session");
+    // FIX M1: Clear from sessionStorage (previously localStorage)
+    sessionStorage.removeItem("cqmotors_session");
   };
 
 
@@ -914,6 +986,81 @@ function AppContent() {
   // Pre-calculated alerts count
   const criticalItems = inventory.filter(item => item.stock <= item.stockMinimo).length;
 
+  const pendingAppointmentsCount = useMemo(() => {
+    return appointments.filter(a => a.estado === "Pendiente").length;
+  }, [appointments]);
+
+  const navItems = useMemo(() => {
+    const items: Array<{
+      id: string;
+      label: string;
+      icon: React.ReactNode;
+      badge?: string | number | null;
+      badgeClass?: string;
+    }> = [];
+
+    if (usuario?.role !== UserRole.Cliente) {
+      items.push({
+        id: "dashboard",
+        label: "Tablero de Control",
+        icon: <LayoutDashboard className="h-5 w-5 shrink-0" />
+      });
+      items.push({
+        id: "bsc",
+        label: "Cuadro de Mando (BSC)",
+        icon: <TrendingUp className="h-5 w-5 shrink-0" />
+      });
+    }
+
+    items.push({
+      id: "vehicles",
+      label: "Control de Patio",
+      icon: <Car className="h-5 w-5 shrink-0" />,
+      badge: selectedVehicle && activeTab === "vehicles" ? `Ficha: ${selectedVehicle.placa}` : null,
+      badgeClass: "bg-emerald-500 text-slate-950 text-[10px] font-mono px-2 py-0.5 rounded-full font-extrabold uppercase"
+    });
+
+    items.push({
+      id: "bitacoras",
+      label: "Bitácoras por Vehículo",
+      icon: <BookOpen className="h-5 w-5 shrink-0" />,
+      badge: selectedVehicle && activeTab === "bitacoras" ? `Ficha: ${selectedVehicle.placa}` : null,
+      badgeClass: "bg-emerald-500 text-slate-950 text-[10px] font-mono px-2 py-0.5 rounded-full font-extrabold uppercase"
+    });
+
+    if (usuario?.role !== UserRole.Cliente) {
+      items.push({
+        id: "inventory",
+        label: "Surtido de Bodega",
+        icon: <Package className="h-5 w-5 shrink-0" />,
+        badge: criticalItems > 0 ? criticalItems : null,
+        badgeClass: "bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+      });
+      items.push({
+        id: "appointments",
+        label: "Citas Recibidas",
+        icon: <CalendarRange className="h-5 w-5 shrink-0" />,
+        badge: pendingAppointmentsCount > 0 ? pendingAppointmentsCount : null,
+        badgeClass: "bg-amber-500 text-slate-950 text-[10px] font-extrabold px-1.5 py-0.5 rounded-full"
+      });
+      items.push({
+        id: "architecture",
+        label: 'Especificación & Esquema DB',
+        icon: <FolderTree className="h-5 w-5 shrink-0" />
+      });
+    }
+
+    items.push({
+      id: "loyalty",
+      label: usuario?.role === UserRole.Cliente ? "Club CQ & Recompensas" : "CRM Fidelidad & Encuestas",
+      icon: <Award className="h-5 w-5 shrink-0" />,
+      badge: usuario?.role !== UserRole.Cliente && surveys.length > 0 ? surveys.length : null,
+      badgeClass: "bg-rose-100 text-rose-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+    });
+
+    return items;
+  }, [usuario?.role, selectedVehicle, activeTab, criticalItems, pendingAppointmentsCount, surveys.length]);
+
   const floatingDarkModeBtn = (
     <button
       type="button"
@@ -935,7 +1082,7 @@ function AppContent() {
 
   if (publicVehicleId) {
     return (
-      <>
+      <Suspense fallback={<PageLoadingFallback />}>
         <PublicVehicleHistory
           vehicleId={publicVehicleId}
           vehicles={vehicles}
@@ -955,13 +1102,13 @@ function AppContent() {
           }}
         />
         {floatingDarkModeBtn}
-      </>
+      </Suspense>
     );
   }
 
   if (!usuario) {
     return (
-      <>
+      <Suspense fallback={<PageLoadingFallback />}>
         <LandingPage 
           onOpenLogin={() => setShowLoginModal(true)} 
           appointments={appointments}
@@ -1005,25 +1152,48 @@ function AppContent() {
           )}
         </AnimatePresence>
         {floatingDarkModeBtn}
-      </>
+      </Suspense>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans select-none antialiased">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col font-sans select-none antialiased">
       
       {/* HEADER BAR */}
       <header className="bg-slate-900 text-white sticky top-0 z-40 border-b border-slate-800 shadow-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             
-            {/* Logo and Brand */}
-            <CQMotorsLogo size="sm" />
+            {/* Left section: Toggles + Logo */}
+            <div className="flex items-center space-x-3">
+              {/* Mobile Menu Toggle Button */}
+              <button
+                type="button"
+                onClick={() => setMobileSidebarOpen(true)}
+                className="p-2 md:hidden bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-all border border-slate-700/60 cursor-pointer"
+                title="Abrir menú de navegación"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+
+              {/* Desktop Collapsible Sidebar Toggle Button */}
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                className="hidden md:flex p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-emerald-400 rounded-xl transition-all border border-slate-700/60 items-center justify-center cursor-pointer"
+                title={sidebarExpanded ? "Contraer menú lateral" : "Expandir menú lateral"}
+              >
+                {sidebarExpanded ? <PanelLeftClose className="h-5 w-5 text-emerald-400" /> : <PanelLeftOpen className="h-5 w-5 text-emerald-400" />}
+              </button>
+
+              {/* Logo and Brand */}
+              <CQMotorsLogo size="sm" />
+            </div>
 
             {/* Real-time Odometer Clock */}
             <div className="hidden md:flex items-center space-x-2 bg-slate-850 py-1.5 px-3 rounded-xl border border-slate-800 text-slate-300 font-mono text-xs">
               <Clock className="h-4 w-4 text-emerald-500 animate-pulse" />
-              <span className="font-semibold">{timeStr || "00:00:00"}</span>
+              <span className="font-semibold"><LiveClock /></span>
               <span className="text-slate-600">|</span>
               <span className="text-slate-400">Taller Central</span>
             </div>
@@ -1086,149 +1256,132 @@ function AppContent() {
         </div>
       </header>
 
-      {/* SUB-HEADER: TAB NAVIGATION CONTROLS */}
-      <nav className="bg-white border-b border-slate-200/80 shadow-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center space-x-2 h-14 overflow-x-auto custom-scrollbar">
-            
-            {usuario.role !== UserRole.Cliente && (
-              <button
-                onClick={() => navigateToTab("dashboard")}
-                className={`px-4 py-2 rounded-xl text-xs font-bold font-sans flex items-center space-x-2 transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === "dashboard" && !selectedVehicle
-                    ? "bg-slate-900 text-white"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                }`}
-              >
-                <LayoutDashboard className="h-4 w-4" />
-                <span>Tablero de Control</span>
-              </button>
-            )}
-
-            {usuario.role !== UserRole.Cliente && (
-              <button
-                onClick={() => navigateToTab("bsc")}
-                className={`px-4 py-2 rounded-xl text-xs font-bold font-sans flex items-center space-x-2 transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === "bsc" && !selectedVehicle
-                    ? "bg-slate-900 text-white"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                }`}
-              >
-                <TrendingUp className="h-4 w-4" />
-                <span>Cuadro de Mando (BSC)</span>
-              </button>
-            )}
-
+      {/* BODY WRAPPER: DESKTOP VERTICAL SIDEBAR + MAIN CONTENT AREA */}
+      <div className="flex flex-1 min-h-[calc(100vh-4rem)]">
+        
+        {/* DESKTOP COLLAPSIBLE VERTICAL SIDEBAR */}
+        <aside
+          className={`hidden md:flex flex-col bg-slate-900 border-r border-slate-800 text-slate-300 transition-all duration-300 sticky top-16 h-[calc(100vh-4rem)] z-30 ${
+            sidebarExpanded ? "w-64" : "w-20"
+          }`}
+        >
+          {/* Sidebar Top Toggle Header */}
+          <div className="p-3.5 border-b border-slate-800/80 flex items-center justify-between">
+            {sidebarExpanded ? (
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 pl-2">
+                Navegación Taller
+              </span>
+            ) : null}
             <button
-              onClick={() => navigateToTab("vehicles")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold font-sans flex items-center space-x-2 transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === "vehicles"
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-              }`}
+              onClick={toggleSidebar}
+              className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-emerald-400 transition-all mx-auto cursor-pointer"
+              title={sidebarExpanded ? "Contraer menú" : "Expandir menú"}
             >
-              <Car className="h-4 w-4" />
-              <span>Control de Patio</span>
-              {selectedVehicle && activeTab === "vehicles" && (
-                <span className="bg-emerald-500 text-slate-950 text-[10px] font-mono px-2 py-0.5 rounded-full font-extrabold uppercase">
-                  Ficha: {selectedVehicle.placa}
-                </span>
-              )}
+              {sidebarExpanded ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
             </button>
-
-            <button
-              onClick={() => navigateToTab("bitacoras")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold font-sans flex items-center space-x-2 transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === "bitacoras"
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-              }`}
-            >
-              <BookOpen className="h-4 w-4" />
-              <span>Bitácoras por Vehículo</span>
-              {selectedVehicle && activeTab === "bitacoras" && (
-                <span className="bg-emerald-500 text-slate-950 text-[10px] font-mono px-2 py-0.5 rounded-full font-extrabold uppercase">
-                  Ficha: {selectedVehicle.placa}
-                </span>
-              )}
-            </button>
-
-            {usuario.role !== UserRole.Cliente && (
-              <button
-                onClick={() => navigateToTab("inventory")}
-                className={`px-4 py-2 rounded-xl text-xs font-bold font-sans flex items-center space-x-2 transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === "inventory" && !selectedVehicle
-                    ? "bg-slate-900 text-white"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                }`}
-              >
-                <Package className="h-4 w-4" />
-                <span>Surtido de Bodega</span>
-                {criticalItems > 0 && (
-                  <span className="bg-rose-100 text-rose-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                    {criticalItems}
-                  </span>
-                )}
-              </button>
-            )}
-
-            {usuario.role !== UserRole.Cliente && (
-              <button
-                onClick={() => navigateToTab("appointments")}
-                className={`px-4 py-2 rounded-xl text-xs font-bold font-sans flex items-center space-x-2 transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === "appointments" && !selectedVehicle
-                    ? "bg-slate-900 text-white"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                }`}
-              >
-                <CalendarRange className="h-4 w-4" />
-                <span>Citas Recibidas</span>
-                {appointments.filter(a => a.estado === "Pendiente").length > 0 && (
-                  <span className="bg-orange-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                    {appointments.filter(a => a.estado === "Pendiente").length}
-                  </span>
-                )}
-              </button>
-            )}
-
-            {usuario.role !== UserRole.Cliente && (
-              <button
-                onClick={() => navigateToTab("architecture")}
-                className={`px-4 py-2 rounded-xl text-xs font-bold font-sans flex items-center space-x-2 transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === "architecture" && !selectedVehicle
-                    ? "bg-slate-900 text-white"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                }`}
-              >
-                <FolderTree className="h-4 w-4" />
-                <span>Especificación & Esquema DB</span>
-              </button>
-            )}
-
-            {/* Loyalty and Satisfaction Surveys Tab Button */}
-            <button
-              onClick={() => navigateToTab("loyalty")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold font-sans flex items-center space-x-2 transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === "loyalty" && !selectedVehicle
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-              }`}
-            >
-              <Award className="h-4 w-4" />
-              <span>{usuario.role === UserRole.Cliente ? "Club CQ & Recompensas" : "CRM Fidelidad & Encuestas"}</span>
-              {usuario.role !== UserRole.Cliente && surveys.length > 0 && (
-                <span className="bg-rose-100 text-rose-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                  {surveys.length}
-                </span>
-              )}
-            </button>
-
           </div>
-        </div>
-      </nav>
 
-      {/* CORE FRAMEWORK BODY LAYOUT */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          {/* Navigation Items List */}
+          <div className="flex-1 py-4 px-3 space-y-1.5 overflow-y-auto custom-scrollbar">
+            {navItems.map(item => {
+              const isActive = activeTab === item.id && !selectedVehicle;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => navigateToTab(item.id)}
+                  className={`w-full flex items-center ${
+                    sidebarExpanded ? "justify-start px-3.5" : "justify-center px-2"
+                  } py-3 rounded-xl text-xs font-bold font-sans transition-all cursor-pointer group relative ${
+                    isActive
+                      ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/20"
+                      : "text-slate-400 hover:bg-slate-800/90 hover:text-slate-100"
+                  }`}
+                  title={!sidebarExpanded ? item.label : undefined}
+                >
+                  <div className="shrink-0">{item.icon}</div>
+                  {sidebarExpanded && (
+                    <span className="ml-3 truncate text-left flex-1">{item.label}</span>
+                  )}
+                  {item.badge && (
+                    <span
+                      className={`${
+                        sidebarExpanded ? "ml-auto" : "absolute -top-1 -right-1"
+                      } ${item.badgeClass}`}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Sidebar Footer User Info */}
+          {sidebarExpanded && (
+            <div className="p-4 border-t border-slate-800/80 bg-slate-950/40">
+              <div className="text-[10px] text-slate-500 font-mono">CQ Motors Taller v2.5</div>
+              <div className="text-[11px] font-bold text-slate-300 truncate mt-0.5">{usuario.fullName}</div>
+            </div>
+          )}
+        </aside>
+
+        {/* MOBILE DRAWER OVERLAY */}
+        <AnimatePresence>
+          {mobileSidebarOpen && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 0.6 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setMobileSidebarOpen(false)}
+                className="fixed inset-0 bg-slate-950 z-50 md:hidden"
+              />
+              <motion.aside
+                initial={{ x: "-100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "-100%" }}
+                transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                className="fixed inset-y-0 left-0 w-72 bg-slate-900 border-r border-slate-800 text-slate-300 z-50 flex flex-col md:hidden p-4 shadow-2xl"
+              >
+                <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+                  <CQMotorsLogo size="sm" />
+                  <button
+                    onClick={() => setMobileSidebarOpen(false)}
+                    className="p-2 hover:bg-slate-800 rounded-xl text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <div className="flex-1 py-4 space-y-2 overflow-y-auto">
+                  {navItems.map(item => {
+                    const isActive = activeTab === item.id && !selectedVehicle;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          navigateToTab(item.id);
+                          setMobileSidebarOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-start px-4 py-3 rounded-xl text-xs font-bold transition-all ${
+                          isActive
+                            ? "bg-emerald-600 text-white"
+                            : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                        }`}
+                      >
+                        <div className="mr-3">{item.icon}</div>
+                        <span className="flex-1 text-left">{item.label}</span>
+                        {item.badge && <span className={item.badgeClass}>{item.badge}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </motion.aside>
+            </>
+          )}
+        </AnimatePresence>
+
+        {/* CORE FRAMEWORK BODY LAYOUT */}
+        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 overflow-x-hidden">
         <AnimatePresence mode="wait">
           <motion.div
             key={selectedVehicle ? `maint-${selectedVehicle.id}` : activeTab}
@@ -1238,6 +1391,7 @@ function AppContent() {
             transition={{ duration: 0.2 }}
             className="focus:outline-none"
           >
+            <Suspense fallback={<PageLoadingFallback />}>
             {/* If a vehicle sheet is specifically selected, bypass regular tabs to keep user focus! */}
             {selectedVehicle && isActionAllowed(usuario.role, "vehicles", selectedVehicle.id) ? (
               <MaintenanceSheet
@@ -1348,16 +1502,18 @@ function AppContent() {
                 )}
               </>
             )}
+            </Suspense>
           </motion.div>
         </AnimatePresence>
       </main>
+      </div>
 
       {/* SYSTEM REGISTRATION FOOTER FOOTPRINT */}
       <footer className="bg-white border-t border-slate-205/85 py-5 text-center text-xs text-slate-400 font-sans mt-12">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
-          <span>CQ Motors S.A. &bull; Sistema de Gestión de Mantenimiento Vehicular (PWA) &copy; 2026</span>
+          <span>CQ Motors S.A. {"•"} Sistema de Gestión de Mantenimiento Vehicular (PWA) {"©"} 2026</span>
           <span className="font-mono text-[10px]">
-            Conectado de forma segura &bull; Enfoque Relacional SQL Server &bull; Power BI Ready
+            Conectado de forma segura {"•"} Enfoque Relacional SQL Server {"•"} Power BI Ready
           </span>
         </div>
       </footer>
