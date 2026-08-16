@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, Suspense, lazy } from "react";
 import { UserRole, Usuario, Vehiculo, Mantenimiento, RepuestoInventario, ActividadReciente, CitaMantenimiento, EncuestaSatisfaccion, CanjePremio } from "./types";
 import { 
   INITIAL_VEHICLES, 
@@ -9,19 +9,58 @@ import {
 import { db, auth, handleFirestoreError, OperationType } from "./firebase";
 import { signInAnonymously } from "firebase/auth";
 import { collection, doc, setDoc, getDoc, getDocs, updateDoc, onSnapshot, deleteDoc, query, where, limit } from "firebase/firestore";
-import Login from "./components/Login";
-import DashboardOverview from "./components/DashboardOverview";
-import VehicleManager from "./components/VehicleManager";
-import MaintenanceSheet from "./components/MaintenanceSheet";
-import InventoryManager from "./components/InventoryManager";
-import ArchitectureGuide from "./components/ArchitectureGuide";
-import AppointmentsManager from "./components/AppointmentsManager";
-import BitacorasManager from "./components/BitacorasManager";
 import CQMotorsLogo from "./components/CQMotorsLogo";
-import PublicVehicleHistory from "./components/PublicVehicleHistory";
-import LoyaltyRewardsCenter from "./components/LoyaltyRewardsCenter";
-import BalancedScorecard from "./components/BalancedScorecard";
-import LandingPage from "./components/LandingPage";
+
+// Lazy-loaded modules (Code Splitting for high performance initial load)
+const Login = lazy(() => import("./components/Login"));
+const DashboardOverview = lazy(() => import("./components/DashboardOverview"));
+const VehicleManager = lazy(() => import("./components/VehicleManager"));
+const MaintenanceSheet = lazy(() => import("./components/MaintenanceSheet"));
+const InventoryManager = lazy(() => import("./components/InventoryManager"));
+const ArchitectureGuide = lazy(() => import("./components/ArchitectureGuide"));
+const AppointmentsManager = lazy(() => import("./components/AppointmentsManager"));
+const BitacorasManager = lazy(() => import("./components/BitacorasManager"));
+const PublicVehicleHistory = lazy(() => import("./components/PublicVehicleHistory"));
+const LoyaltyRewardsCenter = lazy(() => import("./components/LoyaltyRewardsCenter"));
+const BalancedScorecard = lazy(() => import("./components/BalancedScorecard"));
+const LandingPage = lazy(() => import("./components/LandingPage"));
+
+// FIX CODE-4: DEMO_APPOINTMENTS moved to module level — it was being
+// re-declared (creating a new array reference) on every render of AppContent.
+const DEMO_APPOINTMENTS: CitaMantenimiento[] = [];
+
+
+// FIX PERF-3: LiveClock extracted to isolated component.
+// The previous implementation lived inside AppContent and called setTimeStr()
+// every second, triggering a full re-render of the entire component tree.
+// Now, only this tiny component re-renders every second.
+function LiveClock() {
+  const [timeStr, setTimeStr] = React.useState(() =>
+    new Date().toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+  );
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setTimeStr(new Date().toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+  return <span>{timeStr}</span>;
+}
+
+// Premium fallback loader for smooth module loading
+function PageLoadingFallback() {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4 p-8">
+      <div className="relative flex h-12 w-12 items-center justify-center">
+        <div className="absolute h-12 w-12 animate-ping rounded-full bg-emerald-500/20" />
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent" />
+      </div>
+      <span className="font-mono text-xs font-bold uppercase tracking-widest text-slate-400">
+        Cargando módulo de taller...
+      </span>
+    </div>
+  );
+}
 
 import { 
   Wrench, 
@@ -35,8 +74,6 @@ import {
   ShieldCheck,
   Award,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   CalendarRange,
   BookOpen,
   Gift,
@@ -47,24 +84,12 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Menu,
-  X
+  X,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { ToastProvider, useToast } from "./components/Toast";
-
-// Isolated LiveClock component to prevent re-renders of the main app
-function LiveClock() {
-  const [timeStr, setTimeStr] = React.useState(() =>
-    new Date().toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
-  );
-  React.useEffect(() => {
-    const interval = setInterval(() => {
-      setTimeStr(new Date().toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
-  return <span>{timeStr}</span>;
-}
 
 function AppContent() {
   const { showSuccess, showError, showInfo, showWarning } = useToast();
@@ -92,6 +117,26 @@ function AppContent() {
     setDarkMode(prev => !prev);
   };
 
+  // Collapsible vertical sidebar states
+  const [sidebarExpanded, setSidebarExpanded] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("cq_sidebar") !== "collapsed";
+    } catch {
+      return true;
+    }
+  });
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
+
+  const toggleSidebar = () => {
+    setSidebarExpanded(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem("cq_sidebar", next ? "expanded" : "collapsed");
+      } catch {}
+      return next;
+    });
+  };
+
   // Offline resilience states
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [offlineQueue, setOfflineQueue] = useState<any[]>(() => {
@@ -112,27 +157,6 @@ function AppContent() {
   // Selected vehicle for active repair worksheet (overrides tab content)
   const [selectedVehicle, setSelectedVehicle] = useState<Vehiculo | null>(null);
 
-  // Collapsible Sidebar & Mobile Drawer State
-  const [sidebarExpanded, setSidebarExpanded] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem("cq_sidebar_expanded");
-      return saved !== null ? saved === "true" : true;
-    } catch {
-      return true;
-    }
-  });
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
-
-  const toggleSidebar = () => {
-    setSidebarExpanded(prev => {
-      const next = !prev;
-      try {
-        localStorage.setItem("cq_sidebar_expanded", String(next));
-      } catch {}
-      return next;
-    });
-  };
-
   // Scanned public QR tracking state
   const [publicVehicleId, setPublicVehicleId] = useState<string | null>(null);
 
@@ -148,22 +172,21 @@ function AppContent() {
   const [surveys, setSurveys] = useState<EncuestaSatisfaccion[]>([]);
   const [redemptions, setRedemptions] = useState<CanjePremio[]>([]);
 
-  // Clean initial array for appointments
-  const DEMO_APPOINTMENTS: CitaMantenimiento[] = [];
-
   // Auth readiness state for Firestore subscriptions
   const [authReady, setAuthReady] = useState<boolean>(true);
 
-  // Manage session persistence on mount using localStorage and ensure Firebase Auth
+  // FIX M1: Session persistence using sessionStorage instead of localStorage.
+  // sessionStorage expires on tab close, reducing the XSS session hijacking window.
   useEffect(() => {
-    const savedSession = localStorage.getItem("cqmotors_session");
+    const savedSession = sessionStorage.getItem("cqmotors_session");
     if (savedSession) {
       try {
         const uData = JSON.parse(savedSession);
         setUsuario(uData);
-        console.log(`[AUTH SESSION] Restored local session for ${uData.fullName} (${uData.role})`);
-      } catch (err) {
-        console.error("No se pudo restaurar la sesión local:", err);
+        // No PII logged here — only role and name which are non-sensitive operational context
+      } catch {
+        // Silently discard malformed session data
+        sessionStorage.removeItem("cqmotors_session");
       }
     }
 
@@ -171,14 +194,15 @@ function AppContent() {
     if (!auth.currentUser) {
       signInAnonymously(auth).then(() => {
         setAuthReady(true);
-      }).catch(err => {
-        console.warn("Anonymous auth warning:", err);
+      }).catch(() => {
+        // Silent fail — anonymous auth not critical for basic operation
         setAuthReady(true);
       });
     } else {
       setAuthReady(true);
     }
   }, []);
+
 
   // Automatic background database cleanup of simulated mock records & seed inventory if empty
   useEffect(() => {
@@ -305,15 +329,24 @@ function AppContent() {
     }
   }, [isOnline, offlineQueue]);
 
+  // FIX PERF-1: Memoize clienteId to use as stable primitive dependency in useEffect.
+  // Previously, clientVehicleIdsStr depended on `vehicles`, which is updated by the
+  // Firestore subscription, potentially creating a reactive loop.
+  // Extracting just the clienteId as the dependency breaks the cycle.
+  const clienteId = useMemo(() => {
+    if (!usuario || usuario.role !== UserRole.Cliente) return null;
+    return usuario.clienteId ?? null;
+  }, [usuario]);
+
   const clientVehicleIdsStr = useMemo(() => {
-    if (!usuario || usuario.role !== UserRole.Cliente || !usuario.clienteId) return "";
-    return vehicles.filter(v => v.cliente.id === usuario.clienteId).map(v => v.id).join(",");
-  }, [vehicles, usuario]);
+    if (!clienteId) return "";
+    return vehicles.filter(v => v.cliente.id === clienteId).map(v => v.id).join(",");
+  }, [vehicles, clienteId]);
 
   const clientPlacasStr = useMemo(() => {
-    if (!usuario || usuario.role !== UserRole.Cliente || !usuario.clienteId) return "";
-    return vehicles.filter(v => v.cliente.id === usuario.clienteId).map(v => v.placa).join(",");
-  }, [vehicles, usuario]);
+    if (!clienteId) return "";
+    return vehicles.filter(v => v.cliente.id === clienteId).map(v => v.placa).join(",");
+  }, [vehicles, clienteId]);
 
   // Sync in real-time from Firestore based on authenticated role
   useEffect(() => {
@@ -344,12 +377,9 @@ function AppContent() {
     let unsubRedemptions = () => {};
 
     if (isStaff) {
-      const isAlreadySeeded = localStorage.getItem("cq_db_seeded_v1");
-
-      // 1. Staff: subscribe to vehicles
+      // 1. Staff: subscribe to vehicles with automatic seeding if empty
       unsubVehicles = onSnapshot(collection(db, "vehicles"), (snapshot) => {
-        if (snapshot.empty && !isAlreadySeeded) {
-          localStorage.setItem("cq_db_seeded_v1", "true");
+        if (snapshot.empty) {
           INITIAL_VEHICLES.forEach((v) => {
             setDoc(doc(db, "vehicles", v.id), v).catch((err) => {
               console.error("Error seeding vehicle", err);
@@ -364,9 +394,9 @@ function AppContent() {
         handleFirestoreError(error, OperationType.LIST, "vehicles");
       });
 
-      // 2. Staff: subscribe to all maintenances
+      // 2. Staff: subscribe to all maintenances with seeding
       unsubMaintenances = onSnapshot(collection(db, "maintenances"), (snapshot) => {
-        if (snapshot.empty && !isAlreadySeeded) {
+        if (snapshot.empty) {
           INITIAL_MAINTENANCE.forEach((m) => {
             setDoc(doc(db, "maintenances", m.id), m).catch((err) => {
               console.error("Error seeding maintenance", err);
@@ -381,9 +411,9 @@ function AppContent() {
         handleFirestoreError(error, OperationType.LIST, "maintenances");
       });
 
-      // 3. Staff: subscribe to inventory
+      // 3. Staff: subscribe to inventory with seeding
       unsubInventory = onSnapshot(collection(db, "inventory"), (snapshot) => {
-        if (snapshot.empty && !isAlreadySeeded) {
+        if (snapshot.empty) {
           INITIAL_INVENTORY.forEach((i) => {
             setDoc(doc(db, "inventory", i.id), i).catch((err) => {
               console.error("Error seeding inventory", err);
@@ -520,20 +550,12 @@ function AppContent() {
       unsubSurveys();
       unsubRedemptions();
     };
-  }, [authReady, usuario, clientVehicleIdsStr, clientPlacasStr]);
+  // FIX PERF-1: Depend on stable primitives (clienteId) instead of derived strings
+  // that change on every render, which could trigger subscription restarts.
+  }, [authReady, usuario, clienteId]);
 
-  // Live Timer for header
-  const [timeStr, setTimeStr] = useState("");
-
-  useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      setTimeStr(now.toLocaleTimeString("es-EC", { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-    };
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
-    return () => clearInterval(interval);
-  }, []);
+  // FIX PERF-3: LiveClock is now an isolated component above.
+  // This section is intentionally removed to avoid global re-renders every second.
 
   // Parse scanned QR code queries from URL parameters (search & hash)
   useEffect(() => {
@@ -556,9 +578,12 @@ function AppContent() {
         }
       }
 
+      // FIX BAJO-1: Sanitize QR param — enforce max length and safe characters only.
       if (vId && vId.trim()) {
-        console.log("[QR SCANNER] Detected scanned vehicle ID/placa from URL:", vId.trim());
-        setPublicVehicleId(vId.trim());
+        const sanitized = vId.trim().slice(0, 128).replace(/[^a-zA-Z0-9_\-]/g, "");
+        if (sanitized.length > 0) {
+          setPublicVehicleId(sanitized);
+        }
       }
     };
 
@@ -617,7 +642,9 @@ function AppContent() {
   // Safe login callback
   const handleLoginSuccess = (usr: Usuario) => {
     setUsuario(usr);
-    localStorage.setItem("cqmotors_session", JSON.stringify(usr));
+    // FIX M1: Use sessionStorage (expires on tab close) instead of localStorage
+    // to reduce session hijacking attack surface via XSS.
+    sessionStorage.setItem("cqmotors_session", JSON.stringify(usr));
     appendLog("registro", `Sesión iniciada por ${usr.fullName} (${usr.role}).`, usr.fullName);
   };
 
@@ -630,7 +657,8 @@ function AppContent() {
     setUsuario(null);
     setSelectedVehicle(null);
     setActiveTab("dashboard");
-    localStorage.removeItem("cqmotors_session");
+    // FIX M1: Clear from sessionStorage (previously localStorage)
+    sessionStorage.removeItem("cqmotors_session");
   };
 
 
@@ -987,13 +1015,17 @@ function AppContent() {
     items.push({
       id: "vehicles",
       label: "Control de Patio",
-      icon: <Car className="h-5 w-5 shrink-0" />
+      icon: <Car className="h-5 w-5 shrink-0" />,
+      badge: selectedVehicle && activeTab === "vehicles" ? `Ficha: ${selectedVehicle.placa}` : null,
+      badgeClass: "bg-emerald-500 text-slate-950 text-[10px] font-mono px-2 py-0.5 rounded-full font-extrabold uppercase"
     });
 
     items.push({
       id: "bitacoras",
       label: "Bitácoras por Vehículo",
-      icon: <BookOpen className="h-5 w-5 shrink-0" />
+      icon: <BookOpen className="h-5 w-5 shrink-0" />,
+      badge: selectedVehicle && activeTab === "bitacoras" ? `Ficha: ${selectedVehicle.placa}` : null,
+      badgeClass: "bg-emerald-500 text-slate-950 text-[10px] font-mono px-2 py-0.5 rounded-full font-extrabold uppercase"
     });
 
     if (usuario?.role !== UserRole.Cliente) {
@@ -1002,18 +1034,18 @@ function AppContent() {
         label: "Surtido de Bodega",
         icon: <Package className="h-5 w-5 shrink-0" />,
         badge: criticalItems > 0 ? criticalItems : null,
-        badgeClass: "bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full"
+        badgeClass: "bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full"
       });
       items.push({
         id: "appointments",
         label: "Citas Recibidas",
         icon: <CalendarRange className="h-5 w-5 shrink-0" />,
         badge: pendingAppointmentsCount > 0 ? pendingAppointmentsCount : null,
-        badgeClass: "bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full"
+        badgeClass: "bg-amber-500 text-slate-950 text-[10px] font-extrabold px-1.5 py-0.5 rounded-full"
       });
       items.push({
         id: "architecture",
-        label: "Especificación & Esquema DB",
+        label: 'Especificación & Esquema DB',
         icon: <FolderTree className="h-5 w-5 shrink-0" />
       });
     }
@@ -1023,11 +1055,11 @@ function AppContent() {
       label: usuario?.role === UserRole.Cliente ? "Club CQ & Recompensas" : "CRM Fidelidad & Encuestas",
       icon: <Award className="h-5 w-5 shrink-0" />,
       badge: usuario?.role !== UserRole.Cliente && surveys.length > 0 ? surveys.length : null,
-      badgeClass: "bg-emerald-500 text-slate-950 text-[10px] font-bold px-2 py-0.5 rounded-full"
+      badgeClass: "bg-rose-100 text-rose-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
     });
 
     return items;
-  }, [usuario, criticalItems, pendingAppointmentsCount, surveys.length]);
+  }, [usuario?.role, selectedVehicle, activeTab, criticalItems, pendingAppointmentsCount, surveys.length]);
 
   const floatingDarkModeBtn = (
     <button
@@ -1050,7 +1082,7 @@ function AppContent() {
 
   if (publicVehicleId) {
     return (
-      <>
+      <Suspense fallback={<PageLoadingFallback />}>
         <PublicVehicleHistory
           vehicleId={publicVehicleId}
           vehicles={vehicles}
@@ -1070,13 +1102,13 @@ function AppContent() {
           }}
         />
         {floatingDarkModeBtn}
-      </>
+      </Suspense>
     );
   }
 
   if (!usuario) {
     return (
-      <>
+      <Suspense fallback={<PageLoadingFallback />}>
         <LandingPage 
           onOpenLogin={() => setShowLoginModal(true)} 
           appointments={appointments}
@@ -1120,12 +1152,12 @@ function AppContent() {
           )}
         </AnimatePresence>
         {floatingDarkModeBtn}
-      </>
+      </Suspense>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans select-none antialiased">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col font-sans select-none antialiased">
       
       {/* HEADER BAR */}
       <header className="bg-slate-900 text-white sticky top-0 z-40 border-b border-slate-800 shadow-md">
@@ -1350,136 +1382,138 @@ function AppContent() {
 
         {/* CORE FRAMEWORK BODY LAYOUT */}
         <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 overflow-x-hidden">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={selectedVehicle ? `maint-${selectedVehicle.id}` : activeTab}
-              initial={{ opacity: 0, y: 5 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -5 }}
-              transition={{ duration: 0.2 }}
-              className="focus:outline-none"
-            >
-              {/* If a vehicle sheet is specifically selected, bypass regular tabs to keep user focus! */}
-              {selectedVehicle && isActionAllowed(usuario.role, "vehicles", selectedVehicle.id) ? (
-                <MaintenanceSheet
-                  vehicle={vehicles.find(v => v.id === selectedVehicle.id) || selectedVehicle}
-                  vehicleMaintenances={maintenances.filter(m => m.vehiculoId === selectedVehicle.id)}
-                  inventory={inventory}
-                  userRole={usuario.role}
-                  onGoBack={() => setSelectedVehicle(null)}
-                  onUpdateMaintenance={handleUpdateMaintenance}
-                  onUpdateVehicleStatus={handleUpdateVehicleStatus}
-                  onUpdateVehiclePhotos={handleUpdateVehiclePhotos}
-                  onUpdateVehicleCoverImage={handleUpdateVehicleCoverImage}
-                  onDeleteVehicle={handleDeleteVehicle}
-                />
-              ) : (
-                <>
-                  {activeTab === "dashboard" && isActionAllowed(usuario.role, "dashboard") && (
-                    <DashboardOverview
-                      vehicles={usuario && usuario.role === UserRole.Cliente && usuario.clienteId
-                        ? vehicles.filter(v => v.cliente.id === usuario.clienteId)
-                        : vehicles
-                      }
-                      maintenances={maintenances}
-                      inventory={inventory}
-                      activities={activities}
-                      userRole={usuario.role}
-                      onNavigateToTab={navigateToTab}
-                      onRestockItem={handleRestockItem}
-                      onOpenVehicleMaint={handleOpenVehicleMaint}
-                      onUpdateVehicleStatus={handleUpdateVehicleStatus}
-                    />
-                  )}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={selectedVehicle ? `maint-${selectedVehicle.id}` : activeTab}
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -5 }}
+            transition={{ duration: 0.2 }}
+            className="focus:outline-none"
+          >
+            <Suspense fallback={<PageLoadingFallback />}>
+            {/* If a vehicle sheet is specifically selected, bypass regular tabs to keep user focus! */}
+            {selectedVehicle && isActionAllowed(usuario.role, "vehicles", selectedVehicle.id) ? (
+              <MaintenanceSheet
+                vehicle={vehicles.find(v => v.id === selectedVehicle.id) || selectedVehicle}
+                vehicleMaintenances={maintenances.filter(m => m.vehiculoId === selectedVehicle.id)}
+                inventory={inventory}
+                userRole={usuario.role}
+                onGoBack={() => setSelectedVehicle(null)}
+                onUpdateMaintenance={handleUpdateMaintenance}
+                onUpdateVehicleStatus={handleUpdateVehicleStatus}
+                onUpdateVehiclePhotos={handleUpdateVehiclePhotos}
+                onUpdateVehicleCoverImage={handleUpdateVehicleCoverImage}
+                onDeleteVehicle={handleDeleteVehicle}
+              />
+            ) : (
+              <>
+                {activeTab === "dashboard" && isActionAllowed(usuario.role, "dashboard") && (
+                  <DashboardOverview
+                    vehicles={usuario && usuario.role === UserRole.Cliente && usuario.clienteId
+                      ? vehicles.filter(v => v.cliente.id === usuario.clienteId)
+                      : vehicles
+                    }
+                    maintenances={maintenances}
+                    inventory={inventory}
+                    activities={activities}
+                    userRole={usuario.role}
+                    onNavigateToTab={navigateToTab}
+                    onRestockItem={handleRestockItem}
+                    onOpenVehicleMaint={handleOpenVehicleMaint}
+                    onUpdateVehicleStatus={handleUpdateVehicleStatus}
+                  />
+                )}
 
-                  {activeTab === "bsc" && isActionAllowed(usuario.role, "bsc") && (
-                    <BalancedScorecard
-                      vehicles={vehicles}
-                      maintenances={maintenances}
-                      inventory={inventory}
-                      appointments={appointments}
-                      surveys={surveys}
-                      redemptions={redemptions}
-                      userRole={usuario.role}
-                    />
-                  )}
+                {activeTab === "bsc" && isActionAllowed(usuario.role, "bsc") && (
+                  <BalancedScorecard
+                    vehicles={vehicles}
+                    maintenances={maintenances}
+                    inventory={inventory}
+                    appointments={appointments}
+                    surveys={surveys}
+                    redemptions={redemptions}
+                    userRole={usuario.role}
+                  />
+                )}
 
-                  {activeTab === "vehicles" && isActionAllowed(usuario.role, "vehicles") && (
-                    <VehicleManager
-                      vehicles={(usuario && usuario.role === UserRole.Cliente && usuario.clienteId
-                        ? vehicles.filter(v => v.cliente.id === usuario.clienteId)
-                        : vehicles
-                      ).filter(v => v.estado !== "Entregado")}
-                      userRole={usuario.role}
-                      onRegisterVehicle={handleRegisterVehicle}
-                      onSelectVehicle={handleOpenVehicleMaint}
-                      onDeleteVehicle={handleDeleteVehicle}
-                    />
-                  )}
+                {activeTab === "vehicles" && isActionAllowed(usuario.role, "vehicles") && (
+                  <VehicleManager
+                    vehicles={(usuario && usuario.role === UserRole.Cliente && usuario.clienteId
+                      ? vehicles.filter(v => v.cliente.id === usuario.clienteId)
+                      : vehicles
+                    ).filter(v => v.estado !== "Entregado")}
+                    userRole={usuario.role}
+                    onRegisterVehicle={handleRegisterVehicle}
+                    onSelectVehicle={handleOpenVehicleMaint}
+                    onDeleteVehicle={handleDeleteVehicle}
+                  />
+                )}
 
-                  {activeTab === "bitacoras" && isActionAllowed(usuario.role, "bitacoras") && (
-                    <BitacorasManager
-                      vehicles={usuario && usuario.role === UserRole.Cliente && usuario.clienteId
-                        ? vehicles.filter(v => v.cliente.id === usuario.clienteId)
-                        : vehicles
-                      }
-                      maintenances={maintenances}
-                      userRole={usuario.role}
-                      onSelectVehicle={handleOpenVehicleMaint}
-                      onDeleteVehicle={handleDeleteVehicle}
-                    />
-                  )}
+                {activeTab === "bitacoras" && isActionAllowed(usuario.role, "bitacoras") && (
+                  <BitacorasManager
+                    vehicles={usuario && usuario.role === UserRole.Cliente && usuario.clienteId
+                      ? vehicles.filter(v => v.cliente.id === usuario.clienteId)
+                      : vehicles
+                    }
+                    maintenances={maintenances}
+                    userRole={usuario.role}
+                    onSelectVehicle={handleOpenVehicleMaint}
+                    onDeleteVehicle={handleDeleteVehicle}
+                  />
+                )}
 
-                  {activeTab === "inventory" && isActionAllowed(usuario.role, "inventory") && (
-                    <InventoryManager
-                      inventory={inventory}
-                      userRole={usuario.role}
-                      onRestockItem={handleRestockItem}
-                      onAddNewPart={handleAddNewPartToInventory}
-                      onDeletePart={handleDeletePartFromInventory}
-                    />
-                  )}
+                {activeTab === "inventory" && isActionAllowed(usuario.role, "inventory") && (
+                  <InventoryManager
+                    inventory={inventory}
+                    userRole={usuario.role}
+                    onRestockItem={handleRestockItem}
+                    onAddNewPart={handleAddNewPartToInventory}
+                    onDeletePart={handleDeletePartFromInventory}
+                  />
+                )}
 
-                  {activeTab === "appointments" && isActionAllowed(usuario.role, "appointments") && (
-                    <AppointmentsManager
-                      appointments={appointments}
-                      userRole={usuario.role}
-                      onRegisterVehicle={handleRegisterVehicle}
-                    />
-                  )}
+                {activeTab === "appointments" && isActionAllowed(usuario.role, "appointments") && (
+                  <AppointmentsManager
+                    appointments={appointments}
+                    userRole={usuario.role}
+                    onRegisterVehicle={handleRegisterVehicle}
+                  />
+                )}
 
-                  {activeTab === "architecture" && isActionAllowed(usuario.role, "architecture") && (
-                    <ArchitectureGuide 
-                      vehicles={vehicles}
-                      maintenances={maintenances}
-                      inventory={inventory}
-                    />
-                  )}
+                {activeTab === "architecture" && isActionAllowed(usuario.role, "architecture") && (
+                  <ArchitectureGuide 
+                    vehicles={vehicles}
+                    maintenances={maintenances}
+                    inventory={inventory}
+                  />
+                )}
 
-                  {activeTab === "loyalty" && isActionAllowed(usuario.role, "loyalty") && (
-                    <LoyaltyRewardsCenter
-                      vehicles={vehicles}
-                      maintenances={maintenances}
-                      surveys={surveys}
-                      redemptions={redemptions}
-                      userRole={usuario.role}
-                      clienteId={usuario.clienteId}
-                      clienteNombre={usuario.fullName}
-                    />
-                  )}
-                </>
-              )}
-            </motion.div>
-          </AnimatePresence>
-        </main>
+                {activeTab === "loyalty" && isActionAllowed(usuario.role, "loyalty") && (
+                  <LoyaltyRewardsCenter
+                    vehicles={vehicles}
+                    maintenances={maintenances}
+                    surveys={surveys}
+                    redemptions={redemptions}
+                    userRole={usuario.role}
+                    clienteId={usuario.clienteId}
+                    clienteNombre={usuario.fullName}
+                  />
+                )}
+              </>
+            )}
+            </Suspense>
+          </motion.div>
+        </AnimatePresence>
+      </main>
       </div>
 
       {/* SYSTEM REGISTRATION FOOTER FOOTPRINT */}
       <footer className="bg-white border-t border-slate-205/85 py-5 text-center text-xs text-slate-400 font-sans mt-12">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
-          <span>CQ Motors S.A. &bull; Sistema de Gestión de Mantenimiento Vehicular (PWA) &copy; 2026</span>
+          <span>CQ Motors S.A. {"•"} Sistema de Gestión de Mantenimiento Vehicular (PWA) {"©"} 2026</span>
           <span className="font-mono text-[10px]">
-            Conectado de forma segura &bull; Enfoque Relacional SQL Server &bull; Power BI Ready
+            Conectado de forma segura {"•"} Enfoque Relacional SQL Server {"•"} Power BI Ready
           </span>
         </div>
       </footer>

@@ -665,7 +665,7 @@ export default function PublicVehicleHistory({
                 <div className="space-y-1">
                   <span className="text-[9.5px] uppercase font-mono font-black tracking-widest text-rose-400 flex items-center gap-1">
                     <Star className="h-3.5 w-3.5 text-rose-400 fill-rose-500" />
-                    <span>Control de Calidad CQ Motors &bull; Tu opinión importa</span>
+                    <span>Control de Calidad CQ Motors {"•"} Tu opinión importa</span>
                   </span>
                   <h3 className="font-display font-black text-slate-100 text-base">
                     ¿Te acabamos de entregar tu auto o está listo para retiro?
@@ -695,7 +695,7 @@ export default function PublicVehicleHistory({
                   </div>
 
                   <div className="space-y-2">
-                    <label className="font-bold text-slate-350 block">Atención & Hospitalidad:</label>
+                    <label className="font-bold text-slate-350 block">Atención {"&"} Hospitalidad:</label>
                     <div className="flex items-center space-x-1.5 bg-slate-950/50 p-2 rounded-xl border border-slate-800">
                       {[1, 2, 3, 4, 5].map(idx => (
                         <button
@@ -928,48 +928,21 @@ export default function PublicVehicleHistory({
                     </p>
                   ) : (
                     <div className="space-y-2">
-                      {activeMaint.repuestosNecesarios.map((rep) => {
-                        const isCli = rep.origen === "cliente" || rep.repuestoId.startsWith("cli-");
-                        const isExt = rep.origen === "externo" || rep.repuestoId.startsWith("ext-");
-
-                        return (
-                          <div key={rep.id} className="p-3 bg-white border border-slate-200/80 rounded-xl flex items-center justify-between text-xs hover:bg-slate-50 transition-colors">
-                            <div className="space-y-0.5 min-w-0 pr-2">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <h5 className="font-bold text-slate-900">{rep.nombre}</h5>
-                                {isCli ? (
-                                  <span className="px-1.5 py-0.2 bg-purple-100 text-purple-800 text-[8.5px] font-extrabold rounded uppercase tracking-wider shrink-0 border border-purple-200">
-                                    👤 Traído por Cliente
-                                  </span>
-                                ) : isExt ? (
-                                  <span className="px-1.5 py-0.2 bg-amber-100 text-amber-800 text-[8.5px] font-extrabold rounded uppercase tracking-wider shrink-0 border border-amber-200">
-                                    🛒 Adquisición Externa
-                                  </span>
-                                ) : (
-                                  <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 text-[8.5px] font-extrabold rounded uppercase tracking-wider shrink-0 border border-emerald-200">
-                                    🏢 Bodega Taller
-                                  </span>
-                                )}
-                              </div>
-                              <span className="text-[10px] text-slate-550 font-mono block">
-                                Cant: {rep.cantidad} u &bull; {isCli ? "Sin costo ($0.00)" : `Costo unitario: $${rep.costoUnitario.toFixed(2)}`}
-                              </span>
-                              {rep.notas && (
-                                <span className="text-[9.5px] text-slate-500 italic block mt-0.5">
-                                  📝 {rep.notas}
-                                </span>
-                              )}
-                            </div>
-                            
-                            <div className="text-right shrink-0">
-                              <span className="text-[9px] text-slate-400 block font-mono">Total Item</span>
-                              <span className={`font-extrabold font-mono ${isCli ? "text-purple-700" : "text-slate-900"}`}>
-                                {isCli ? "$0.00" : `$${(rep.cantidad * rep.costoUnitario).toFixed(2)}`}
-                              </span>
-                            </div>
+                      {activeMaint.repuestosNecesarios.map((rep) => (
+                        <div key={rep.id} className="p-3 bg-white border border-slate-200/80 rounded-xl flex items-center justify-between text-xs hover:bg-slate-50 transition-colors">
+                          <div className="space-y-0.5">
+                            <h5 className="font-bold text-slate-900">{rep.nombre}</h5>
+                            <span className="text-[10px] text-slate-550 font-mono">
+                              Cant: {rep.cantidad} u &bull; Costo unitario: ${rep.costoUnitario.toFixed(2)}
+                            </span>
                           </div>
-                        );
-                      })}
+                          
+                          <div className="text-right">
+                            <span className="text-[9px] text-slate-400 block font-mono">Total Item</span>
+                            <span className="font-extrabold text-slate-900 font-mono">${(rep.cantidad * rep.costoUnitario).toFixed(2)}</span>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -1039,8 +1012,7 @@ export default function PublicVehicleHistory({
                 {/* Cost Breakdown Footer summary */}
                 <div className="p-6 bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 font-mono text-xs">
                   <div className="space-y-1">
-                    <div className="text-slate-400">Total Tareas & Servicios: <strong className="text-white">${activeMaint.tareasRealizadas.reduce((acc, t) => acc + (t.costoEstimado || 0), 0).toFixed(2)}</strong></div>
-                    <div className="text-slate-400">Total Mano de Obra: <strong className="text-white">${activeMaint.costoManoObra.toFixed(2)}</strong></div>
+                    <div className="text-slate-400">Total Mano Obra: <strong className="text-white">${activeMaint.costoManoObra.toFixed(2)}</strong></div>
                     <div className="text-slate-400">Total Repuestos: <strong className="text-white">${activeMaint.repuestosNecesarios.reduce((sm, rm) => sm + (rm.cantidad * rm.costoUnitario), 0).toFixed(2)}</strong></div>
                   </div>
 
@@ -1064,9 +1036,9 @@ export default function PublicVehicleHistory({
       {/* FOOTER BAR */}
       <footer className="bg-white border-t border-slate-200/80 py-6 text-center text-xs text-slate-400 font-sans mt-12 no-print">
         <div className="max-w-4xl mx-auto px-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
-          <span>CQ Motors S.A. &bull; Sistema de Gestión de Mantenimiento Vehicular (PWA) &copy; 2026</span>
+          <span>CQ Motors S.A. {"•"} Sistema de Gestión de Mantenimiento Vehicular (PWA) {"©"} 2026</span>
           <span className="font-mono text-[9.5px]">
-            Efectuando consulta pública segura QR &bull; Power BI Ready
+            Efectuando consulta pública segura QR {"•"} Power BI Ready
           </span>
         </div>
       </footer>

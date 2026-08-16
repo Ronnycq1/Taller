@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { RepuestoInventario, UserRole } from "../types";
+import { sanitizeInput } from "../utils/security";
 import { 
   Package, 
   Plus, 
@@ -163,14 +164,15 @@ export default function InventoryManager({
     setSuccessCount(null);
 
     try {
+      const sanitizedText = sanitizeInput(copiedInvoiceText, 50000);
       const response = await fetch("/api/analyze-invoice", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          invoiceText: copiedInvoiceText,
-          fileName: selectedFileName || "factura_manual.txt"
+          invoiceText: sanitizedText,
+          fileName: sanitizeInput(selectedFileName || "factura_manual.txt", 100)
         })
       });
 

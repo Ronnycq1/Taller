@@ -68,8 +68,6 @@ export interface RepuestoRequerido {
   costoCompraUnitario?: number; // purchase cost for CPr calculations
   surtido: boolean;
   imagenUrl?: string; // photo of the spare part to be changed
-  origen?: "bodega" | "cliente" | "externo"; // Origin of the part
-  notas?: string; // Additional notes e.g., "Entregado por el dueño", "Comprado en almacén externo"
 }
 
 export interface Mantenimiento {
